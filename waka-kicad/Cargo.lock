@@ -691,6 +691,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "env_logger",
+ "home",
  "kicad-api-rs",
  "log",
  "sysinfo",
