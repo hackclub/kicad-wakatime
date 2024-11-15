@@ -1,0 +1,9 @@
+[package]
+name = "waka-kicad"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.93"
+kicad-api-rs = "0.0.1"
+sysinfo = "0.32.0"
