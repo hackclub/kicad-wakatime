@@ -97,12 +97,8 @@ impl<'a> WakaKicad {
     debug!("{:?}", board);
     Ok(board)
   }
-  pub fn set_items(&mut self, k: KiCadObjectType, v: Vec<BoardItem>) {
-    let len = v.len();
-    self.items.insert(k, v);
-    debug!("{:?} = [{:?}]", k, len);
-  }
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
+    let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     info!("Setting board items...");
     // TODO: safety
     // let board = self.board.as_ref().unwrap();
@@ -113,11 +109,22 @@ impl<'a> WakaKicad {
     let vias = board.get_items(&[KiCadObjectType::KOT_PCB_VIA])?;
     let footprint_instances = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT])?;
     let pads = board.get_items(&[KiCadObjectType::KOT_PCB_PAD])?;
-    self.set_items(KiCadObjectType::KOT_PCB_TRACE, tracks);
-    self.set_items(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
-    self.set_items(KiCadObjectType::KOT_PCB_VIA, vias);
-    self.set_items(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
-    self.set_items(KiCadObjectType::KOT_PCB_PAD, pads);
+    items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
+    items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
+    items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
+    items_new.insert(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
+    items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
+    // debug
+    for (kot, vec) in items_new.iter() {
+      debug!("{:?} = [{}]", kot, vec.len());
+    }
+    // check
+    if self.items.iter().count() > 0 && self.items != items_new {
+      info!("Old items differ from new items!");
+    }
+    // set
+    self.items = items_new;
+    info!("Set board items!");
     Ok(())
   }
   pub fn cfg_path(&self) -> PathBuf {
