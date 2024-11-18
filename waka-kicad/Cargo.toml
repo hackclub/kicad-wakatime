@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = "1.0.93"
 env_logger = "0.11.5"
 home = "0.5.9"
-kicad-api-rs = "0.0.1"
+# kicad-api-rs = "0.0.1"
+kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
 sysinfo = "0.32.0"
