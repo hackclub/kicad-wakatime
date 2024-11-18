@@ -2,11 +2,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
+use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::Board};
 use kicad::protos::enums::KiCadObjectType;
+use log::debug;
 use log::info;
 use log::error;
-// use sysinfo::{Pid, Process, System};
+use sysinfo::{Pid, Process, System};
 use thiserror::Error;
 
 #[derive(Default)]
@@ -28,6 +30,15 @@ impl<'a> WakaKicad<'a> {
       error!("Ensure this file exists before proceeding");
       return Err(PluginError::CliNotFound.into())
     }
+    Ok(())
+  }
+  pub fn get_api_key(&mut self) -> Result<(), anyhow::Error> {
+    let cfg_path = self.cfg_path();
+    // TODO: remove expects
+    let cfg = Ini::load_from_file(cfg_path).expect("Could not get ~/.wakatime.cfg!");
+    let cfg_settings = cfg.section(Some("settings")).expect("Could not get settings from ~/.wakatime.cfg!");
+    let api_key = cfg_settings.get("api_key").expect("Could not get API key!");
+    debug!("api_key = {api_key}");
     Ok(())
   }
   pub fn await_connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
@@ -53,6 +64,7 @@ impl<'a> WakaKicad<'a> {
     self.kicad = k;
     let Some(ref k) = self.kicad else { unreachable!(); };
     info!("Connected to KiCAD! (v{})", k.get_version().unwrap());
+    debug!("{:?}", k);
     Ok(())
   }
   pub fn await_get_open_board(&'a mut self) -> Result<(), anyhow::Error> {
@@ -74,9 +86,9 @@ impl<'a> WakaKicad<'a> {
       times += 1;
     }
     self.board = b;
-    // let Some(ref b) = self.board else { unreachable!(); };
-    // info!("Found open board: {:?}", b);
+    let Some(ref b) = self.board else { unreachable!(); };
     info!("Found open board!");
+    debug!("{:?}", b);
     Ok(())
   }
   pub fn get_many_types(&mut self) -> Result<(), anyhow::Error> {
@@ -94,6 +106,10 @@ impl<'a> WakaKicad<'a> {
     let pads = board.get_items(&[KiCadObjectType::KOT_PCB_PAD])?;
     info!("Found {} pads", pads.len());
     Ok(())
+  }
+  pub fn cfg_path(&self) -> PathBuf {
+    let home_dir = home::home_dir().expect("Unable to get your home directory!");
+    home_dir.join(".wakatime.cfg")
   }
   pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
     let (os, arch) = consts;
@@ -134,17 +150,17 @@ pub fn env_consts() -> (&'static str, &'static str) {
   (os, arch)
 }
 
-// pub trait FindProcess {
-//   fn find_process(&self, name: &str) -> Option<(&Pid, &Process)>;
-// }
+pub trait FindProcess {
+  fn find_process(&self, name: &str) -> Option<(&Pid, &Process)>;
+}
 
-// impl FindProcess for System {
-//   fn find_process(&self, name: &str) -> Option<(&Pid, &Process)> {
-//     self.processes()
-//       .iter()
-//       .filter(|(_pid, process)| process.exe().is_some_and(|e| e.ends_with(name)))
-//       .collect::<Vec<_>>()
-//       .first()
-//       .cloned()
-//   }
-// }
+impl FindProcess for System {
+  fn find_process(&self, name: &str) -> Option<(&Pid, &Process)> {
+    self.processes()
+      .iter()
+      .filter(|(_pid, process)| process.exe().is_some_and(|e| e.ends_with(name)))
+      .collect::<Vec<_>>()
+      .first()
+      .cloned()
+  }
+}
