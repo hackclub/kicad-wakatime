@@ -6,34 +6,16 @@ use kicad::{DocumentType, KiCad, KiCadConnectionConfig};
 // use log::debug;
 // use log::error;
 use log::info;
+use waka_kicad::WakaKicad;
 // use sysinfo::System;
 
 fn main() -> Result<(), anyhow::Error> {
   env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-  // get info
-  // matches wakatime-cli release names
-  let os = match std::env::consts::OS {
-    "macos" => "darwin", // same as wakatime-cli
-    a => a,
-  };
-  info!("os = {os}");
-  let arch = match std::env::consts::ARCH {
-    "x86" => "386",
-    "x86_64" => "amd64",
-    "aarch64" => "arm64", // e.g. Apple Silicon
-    a => a,
-  };
-  info!("arch = {arch}");
+  let plugin = WakaKicad::default();
   // check that wakatime-cli is installed
-  let home_dir = home::home_dir().expect("Unable to get your home directory!");
-  info!("home_dir = {:?}", home_dir);
-  let wk_release_name = match os {
-    "windows" => format!("wakatime-cli-windows-{arch}.exe"),
-    _o => format!("wakatime-cli-{os}-{arch}"),
-  };
-  let wk_path = home_dir.join(".wakatime").join(wk_release_name);
-  info!("WakaTime CLI path: {:?}", wk_path);
-  if fs::exists(wk_path)? {
+  let cli_path = plugin.cli_path(waka_kicad::env_consts());
+  info!("WakaTime CLI path: {:?}", cli_path);
+  if fs::exists(cli_path)? {
     info!("File exists!");
     // TODO: update to latest version if needed
   } else {
