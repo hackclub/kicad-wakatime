@@ -1,12 +1,13 @@
+use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use kicad::{KiCad, KiCadConnectionConfig, board::Board};
 use kicad::protos::enums::KiCadObjectType;
 use log::info;
-// use log::error;
+use log::error;
 // use sysinfo::{Pid, Process, System};
-// use thiserror::Error;
+use thiserror::Error;
 
 #[derive(Default)]
 pub struct WakaKicad<'a> {
@@ -15,6 +16,20 @@ pub struct WakaKicad<'a> {
 }
 
 impl<'a> WakaKicad<'a> {
+  pub fn check_cli_installed(&self) -> Result<(), anyhow::Error> {
+    let cli_path = self.cli_path(env_consts());
+    info!("WakaTime CLI path: {:?}", cli_path);
+    if fs::exists(cli_path)? {
+      info!("File exists!");
+      // TODO: update to latest version if needed
+    } else {
+      // TODO: download latest version
+      error!("File does not exist!");
+      error!("Ensure this file exists before proceeding");
+      return Err(PluginError::CliNotFound.into())
+    }
+    Ok(())
+  }
   pub fn await_connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
     let mut k: Option<KiCad>;
@@ -91,13 +106,15 @@ impl<'a> WakaKicad<'a> {
   }
 }
 
-// #[derive(Debug, Error)]
-// pub enum PluginError {
-//   #[error("Could not connect to KiCAD!")]
-//   CouldNotConnect,
-//   #[error("Could not find open board!")]
-//   NoOpenBoard,
-// }
+#[derive(Debug, Error)]
+pub enum PluginError {
+  #[error("Could not find WakaTime CLI!")]
+  CliNotFound,
+  // #[error("Could not connect to KiCAD!")]
+  // CouldNotConnect,
+  // #[error("Could not find open board!")]
+  // NoOpenBoard,
+}
 
 /// Return the current OS and ARCH.
 /// Values are changed to match those used in wakatime-cli release names.
