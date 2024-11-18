@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
-
 use kicad::{KiCad, KiCadConnectionConfig, board::Board};
 use kicad::protos::enums::KiCadObjectType;
 use log::info;
+// use log::error;
 // use sysinfo::{Pid, Process, System};
+// use thiserror::Error;
 
 #[derive(Default)]
 pub struct WakaKicad<'a> {
@@ -14,10 +15,15 @@ pub struct WakaKicad<'a> {
 }
 
 impl<'a> WakaKicad<'a> {
-  pub fn await_connect_to_kicad(&mut self) {
+  pub fn await_connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
     let mut k: Option<KiCad>;
     loop {
+      // if times == 6 {
+      //   error!("Could not connect to KiCAD! (30s)");
+      //   error!("Ensure KiCAD is open and the KiCAD API is enabled (Preferences -> Plugins -> Enable KiCAD API)");
+      //   return Err(PluginError::CouldNotConnect.into())
+      // }
       info!("Connecting to KiCAD... ({times})");
       k = KiCad::new(KiCadConnectionConfig {
         client_name: String::from("waka-kicad"),
@@ -32,12 +38,18 @@ impl<'a> WakaKicad<'a> {
     self.kicad = k;
     let Some(ref k) = self.kicad else { unreachable!(); };
     info!("Connected to KiCAD {}", k.get_version().unwrap());
+    Ok(())
   }
-  pub fn await_get_open_board(&'a mut self) {
+  pub fn await_get_open_board(&'a mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
     let mut b: Option<Board>;
     let Some(ref k) = self.kicad else { unreachable!(); };
     loop {
+      // if times == 6 {
+      //   error!("Could not find open board! (30s)");
+      //   error!("Ensure that a board is open in the Schematic Editor or PCB Editor");
+      //   return Err(PluginError::NoOpenBoard.into())
+      // }
       info!("Waiting for open board... ({times})");
       b = k.get_open_board().ok();
       if b.is_some() {
@@ -49,6 +61,7 @@ impl<'a> WakaKicad<'a> {
     self.board = b;
     let Some(ref b) = self.board else { unreachable!(); };
     info!("Found open board: {:?}", b);
+    Ok(())
   }
   pub fn get_many_types(&mut self) -> Result<(), anyhow::Error> {
     // TODO: safety
@@ -76,6 +89,14 @@ impl<'a> WakaKicad<'a> {
     home_dir.join(".wakatime").join(cli_name)
   }
 }
+
+// #[derive(Debug, Error)]
+// pub enum PluginError {
+//   #[error("Could not connect to KiCAD!")]
+//   CouldNotConnect,
+//   #[error("Could not find open board!")]
+//   NoOpenBoard,
+// }
 
 /// Return the current OS and ARCH.
 /// Values are changed to match those used in wakatime-cli release names.
