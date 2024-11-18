@@ -20,7 +20,6 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.check_cli_installed()?;
   plugin.get_api_key()?;
   plugin.await_connect_to_kicad()?;
-  plugin.await_get_open_board()?;
-  // plugin.get_many_types()?;
+  plugin.set_many_items()?;
   Ok(())
 }

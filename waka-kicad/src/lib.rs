@@ -1,9 +1,12 @@
+use std::rc::Rc;
+use std::sync::{Mutex, RwLock};
+use std::{collections::HashMap, sync::Arc};
 use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use ini::Ini;
-use kicad::{KiCad, KiCadConnectionConfig, board::Board};
+use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
@@ -12,12 +15,16 @@ use sysinfo::{Pid, Process, System};
 use thiserror::Error;
 
 #[derive(Default)]
-pub struct WakaKicad<'a> {
+// pub struct WakaKicad<'a> {
+pub struct WakaKicad {
   pub kicad: Option<KiCad>,
-  pub board: Option<Board<'a>>,
+  // TODO: get somebody way smarter than me to help me uncomment this field
+  // pub board: Option<Board<'a>>,
+  pub items: HashMap<KiCadObjectType, Vec<BoardItem>>
 }
 
-impl<'a> WakaKicad<'a> {
+// impl<'a> WakaKicad<'a> {
+impl<'a> WakaKicad {
   pub fn check_cli_installed(&self) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
     info!("WakaTime CLI path: {:?}", cli_path);
@@ -35,6 +42,7 @@ impl<'a> WakaKicad<'a> {
   pub fn get_api_key(&mut self) -> Result<(), anyhow::Error> {
     let cfg_path = self.cfg_path();
     // TODO: remove expects
+    // TODO: prompt for and store API key if not found
     let cfg = Ini::load_from_file(cfg_path).expect("Could not get ~/.wakatime.cfg!");
     let cfg_settings = cfg.section(Some("settings")).expect("Could not get settings from ~/.wakatime.cfg!");
     let api_key = cfg_settings.get("api_key").expect("Could not get API key!");
@@ -62,15 +70,15 @@ impl<'a> WakaKicad<'a> {
       times += 1;
     }
     self.kicad = k;
-    let Some(ref k) = self.kicad else { unreachable!(); };
-    info!("Connected to KiCAD! (v{})", k.get_version().unwrap());
-    debug!("{:?}", k);
+    info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
+    // debug!("{:?}", k);
     Ok(())
   }
-  pub fn await_get_open_board(&'a mut self) -> Result<(), anyhow::Error> {
+  pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
+  // pub fn await_get_open_board(&mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
-    let mut b: Option<Board>;
-    let Some(ref k) = self.kicad else { unreachable!(); };
+    let k = self.kicad.as_ref().unwrap();
+    let mut board: Option<Board>;
     loop {
       // if times == 6 {
       //   error!("Could not find open board! (30s)");
@@ -78,33 +86,38 @@ impl<'a> WakaKicad<'a> {
       //   return Err(PluginError::NoOpenBoard.into())
       // }
       info!("Waiting for open board... ({times})");
-      b = k.get_open_board().ok();
-      if b.is_some() {
+      board = k.get_open_board().ok();
+      if board.is_some() {
         break;
       }
       sleep(Duration::from_secs(5));
       times += 1;
     }
-    self.board = b;
-    let Some(ref b) = self.board else { unreachable!(); };
     info!("Found open board!");
-    debug!("{:?}", b);
-    Ok(())
+    debug!("{:?}", board);
+    Ok(board)
   }
-  pub fn get_many_types(&mut self) -> Result<(), anyhow::Error> {
+  pub fn set_items(&mut self, k: KiCadObjectType, v: Vec<BoardItem>) {
+    let len = v.len();
+    self.items.insert(k, v);
+    debug!("{:?} = [{:?}]", k, len);
+  }
+  pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
+    info!("Setting board items...");
     // TODO: safety
-    let board = self.board.as_mut().unwrap();
+    // let board = self.board.as_ref().unwrap();
+    let board = self.await_get_open_board()?.unwrap();
     let tracks = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE])?;
-    info!("Found {} tracks", tracks.len());
     // TODO: is this the right variant?
     let arc_tracks = board.get_items(&[KiCadObjectType::KOT_PCB_ARC])?;
-    info!("Found {} arc tracks", arc_tracks.len());
     let vias = board.get_items(&[KiCadObjectType::KOT_PCB_VIA])?;
-    info!("Found {} vias", vias.len());
     let footprint_instances = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT])?;
-    info!("Found {} footprint instances", footprint_instances.len());
     let pads = board.get_items(&[KiCadObjectType::KOT_PCB_PAD])?;
-    info!("Found {} pads", pads.len());
+    self.set_items(KiCadObjectType::KOT_PCB_TRACE, tracks);
+    self.set_items(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
+    self.set_items(KiCadObjectType::KOT_PCB_VIA, vias);
+    self.set_items(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
+    self.set_items(KiCadObjectType::KOT_PCB_PAD, pads);
     Ok(())
   }
   pub fn cfg_path(&self) -> PathBuf {
