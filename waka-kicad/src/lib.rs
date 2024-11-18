@@ -37,7 +37,7 @@ impl<'a> WakaKicad<'a> {
     }
     self.kicad = k;
     let Some(ref k) = self.kicad else { unreachable!(); };
-    info!("Connected to KiCAD {}", k.get_version().unwrap());
+    info!("Connected to KiCAD! (v{})", k.get_version().unwrap());
     Ok(())
   }
   pub fn await_get_open_board(&'a mut self) -> Result<(), anyhow::Error> {
@@ -59,8 +59,9 @@ impl<'a> WakaKicad<'a> {
       times += 1;
     }
     self.board = b;
-    let Some(ref b) = self.board else { unreachable!(); };
-    info!("Found open board: {:?}", b);
+    // let Some(ref b) = self.board else { unreachable!(); };
+    // info!("Found open board: {:?}", b);
+    info!("Found open board!");
     Ok(())
   }
   pub fn get_many_types(&mut self) -> Result<(), anyhow::Error> {

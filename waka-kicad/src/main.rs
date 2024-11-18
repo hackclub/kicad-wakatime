@@ -10,6 +10,7 @@ use waka_kicad::WakaKicad;
 
 fn main() -> Result<(), anyhow::Error> {
   env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+  info!("Initializing waka-kicad...");
   let mut plugin = WakaKicad::default();
   // check that wakatime-cli is installed
   let cli_path = plugin.cli_path(waka_kicad::env_consts());
