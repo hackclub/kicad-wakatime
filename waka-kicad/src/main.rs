@@ -1,5 +1,6 @@
-use std::{fs, path::Path};
 // use waka_kicad::FindProcess;
+use std::fs;
+use env_logger::Env;
 // only works on KiCAD nightly
 use kicad::{DocumentType, KiCad, KiCadConnectionConfig};
 // use log::debug;
@@ -8,7 +9,7 @@ use log::info;
 // use sysinfo::System;
 
 fn main() -> Result<(), anyhow::Error> {
-  env_logger::init();
+  env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
   // get info
   // matches wakatime-cli release names
   let os = match std::env::consts::OS {
