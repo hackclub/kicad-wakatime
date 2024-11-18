@@ -11,6 +11,7 @@ use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
 use log::error;
+// use mouse_position::mouse_position::Mouse;
 use sysinfo::{Pid, Process, System};
 use thiserror::Error;
 
@@ -20,8 +21,13 @@ pub struct WakaKicad {
   pub kicad: Option<KiCad>,
   // TODO: get somebody way smarter than me to help me uncomment this field
   // pub board: Option<Board<'a>>,
-  pub items: HashMap<KiCadObjectType, Vec<BoardItem>>
+  pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
+  // pub mouse_position: Mouse,
+  pub active: bool,
 }
+
+// TODO: heartbeat - a new file is being focused on
+// TODO: heartbeat - the currently focused file has been saved
 
 // impl<'a> WakaKicad<'a> {
 impl<'a> WakaKicad {
@@ -97,6 +103,12 @@ impl<'a> WakaKicad {
     debug!("{:?}", board);
     Ok(board)
   }
+  pub fn set_active(&mut self, active: bool) {
+    if active != self.active {
+      debug!("self.active = {active}");
+    }
+    self.active = active;
+  }
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     info!("Setting board items...");
@@ -114,13 +126,14 @@ impl<'a> WakaKicad {
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
     items_new.insert(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
     items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
-    // debug
-    for (kot, vec) in items_new.iter() {
-      debug!("{:?} = [{}]", kot, vec.len());
-    }
     // check
-    if self.items.iter().count() > 0 && self.items != items_new {
+    // if self.items.iter().count() > 0 && self.items != items_new {
+    if self.items != items_new {
       info!("Old items differ from new items!");
+      for (kot, vec) in items_new.iter() {
+        debug!("{:?} = [{}]", kot, vec.len());
+      }
+      self.set_active(true);
     }
     // set
     self.items = items_new;

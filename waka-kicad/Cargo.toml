@@ -10,6 +10,7 @@ home = "0.5.9"
 # kicad-api-rs = "0.0.1"
 kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
+mouse_position = "0.1.4"
 rust-ini = "0.21.1"
 sysinfo = "0.32.0"
 thiserror = "2.0.3"
