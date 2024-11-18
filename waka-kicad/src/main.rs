@@ -36,6 +36,6 @@ fn main() -> Result<(), anyhow::Error> {
     error!("No open board!");
     process::exit(1);
   }
-  // TODO: get Vecs
+  plugin.get_many_types();
   Ok(())
 }

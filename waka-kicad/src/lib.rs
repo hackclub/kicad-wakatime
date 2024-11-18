@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use kicad::board::Board;
-// use kicad::{DocumentType, KiCad};
+use kicad::protos::enums::KiCadObjectType;
 use log::info;
 // use sysinfo::{Pid, Process, System};
 
@@ -13,6 +13,20 @@ pub struct WakaKicad<'a> {
 impl<'a> WakaKicad<'a> {
   pub fn set_board(&mut self, board: Option<Board<'a>>) {
     self.board = board;
+  }
+  pub fn get_many_types(&mut self) -> Result<(), anyhow::Error> {
+    // TODO: actually set!
+    // TODO: safety
+    let board = self.board.as_mut().unwrap();
+    let tracks = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE])?;
+    info!("Found {} tracks", tracks.len());
+    // TODO: is this the right variant?
+    let arc_tracks = board.get_items(&[KiCadObjectType::KOT_PCB_ARC])?;
+    info!("Found {} arc tracks", arc_tracks.len());
+    let vias = board.get_items(&[KiCadObjectType::KOT_PCB_VIA])?;
+    info!("Found {} vias", vias.len());
+    // TODO: FootprintInstance (!!!)
+    Ok(())
   }
   pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
     let (os, arch) = consts;
