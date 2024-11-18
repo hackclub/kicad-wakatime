@@ -1,13 +1,19 @@
 use std::path::PathBuf;
 
+use kicad::board::Board;
 // use kicad::{DocumentType, KiCad};
 use log::info;
 // use sysinfo::{Pid, Process, System};
 
 #[derive(Default)]
-pub struct WakaKicad;
+pub struct WakaKicad<'a> {
+  pub board: Option<Board<'a>>,
+}
 
-impl WakaKicad {
+impl<'a> WakaKicad<'a> {
+  pub fn set_board(&mut self, board: Option<Board<'a>>) {
+    self.board = board;
+  }
   pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
     let (os, arch) = consts;
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
