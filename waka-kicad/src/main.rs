@@ -23,19 +23,8 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO: download latest version
     info!("File does not exist");
   }
-  // TODO: wait instead of expect
-  // connect to KiCAD
-  let k = KiCad::new(KiCadConnectionConfig {
-    client_name: String::from("waka-kicad"),
-    ..Default::default()
-  }).expect("KiCAD not running!");
-  info!("Connected to KiCAD {}", k.get_version().unwrap());
-  // get contents of open board
-  plugin.set_board(k.get_open_board().ok());
-  if plugin.board.is_none() {
-    error!("No open board!");
-    process::exit(1);
-  }
-  plugin.get_many_types();
+  plugin.await_connect_to_kicad();
+  plugin.await_get_open_board();
+  // plugin.get_many_types()?;
   Ok(())
 }
