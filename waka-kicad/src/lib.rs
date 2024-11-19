@@ -1,8 +1,8 @@
-use std::rc::Rc;
-use std::sync::{Mutex, RwLock};
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+// use std::rc::Rc;
+// use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ini::Ini;
@@ -12,8 +12,9 @@ use log::debug;
 use log::info;
 use log::error;
 // use mouse_position::mouse_position::Mouse;
-use sysinfo::{Pid, Process, System};
 use thiserror::Error;
+
+pub mod traits;
 
 #[derive(Default)]
 // pub struct WakaKicad<'a> {
@@ -218,19 +219,4 @@ pub fn env_consts() -> (&'static str, &'static str) {
     a => a,
   };
   (os, arch)
-}
-
-pub trait FindProcess {
-  fn find_process(&self, name: &str) -> Option<(&Pid, &Process)>;
-}
-
-impl FindProcess for System {
-  fn find_process(&self, name: &str) -> Option<(&Pid, &Process)> {
-    self.processes()
-      .iter()
-      .filter(|(_pid, process)| process.exe().is_some_and(|e| e.ends_with(name)))
-      .collect::<Vec<_>>()
-      .first()
-      .cloned()
-  }
 }

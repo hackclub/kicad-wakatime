@@ -1,7 +1,7 @@
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use waka_kicad::FindProcess;
+use waka_kicad::traits::FindProcess;
 // use std::fs;
 // use std::process;
 use env_logger::Env;
@@ -32,6 +32,7 @@ fn main() -> Result<(), anyhow::Error> {
     plugin.set_many_items()?;
     // TODO: a new file is being focused on
     // TODO: the currently focused file has been saved
+    // TODO: this block is not correct
     if plugin.enough_time_passed() {
       info!("A heartbeat should be sent (enough time passed)");
       plugin.send_heartbeat(false);
