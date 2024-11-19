@@ -7,6 +7,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
+use kicad::protos::base_types::document_specifier::Identifier;
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
@@ -22,11 +23,11 @@ pub struct WakaKicad {
   pub kicad: Option<KiCad>,
   // TODO: open a waka-kicad issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
+  // currently focused file
+  pub file: String,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
   pub time: Duration,
-  // pub active: bool,
-  // pub last_activity_time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
   // the last file that was sent
@@ -109,6 +110,18 @@ impl<'a> WakaKicad {
     info!("Found open board!");
     debug!("{:?}", board);
     Ok(board)
+  }
+  pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) {
+    // TODO: other variants
+    if let Identifier::BoardFilename(board_filename) = identifier {
+      debug!("board_filename = {board_filename}");
+      if self.file != board_filename {
+        info!("Identifier changed!");
+        self.file = board_filename;
+        // since the focused file changed, it might be time to send a heartbeat
+        self.maybe_send_heartbeat(false);
+      }
+    }
   }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")

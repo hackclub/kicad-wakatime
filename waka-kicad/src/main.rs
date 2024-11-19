@@ -1,14 +1,13 @@
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use waka_kicad::traits::DebugProcesses;
+use waka_kicad::{WakaKicad, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
 use env_logger::Env;
 use log::debug;
 // use log::error;
 use log::info;
-use waka_kicad::WakaKicad;
 use sysinfo::System;
 
 fn main() -> Result<(), anyhow::Error> {
@@ -28,8 +27,9 @@ fn main() -> Result<(), anyhow::Error> {
   loop {
     plugin.set_current_time(plugin.current_time());
     // TODO
-    // let board = plugin.await_get_open_board()?.unwrap();
-    // let identifier = board.doc.identifier;
+    let board = plugin.await_get_open_board()?.unwrap();
+    let Some(identifier) = board.doc.identifier else { unreachable!(); };
+    plugin.set_current_file_from_identifier(identifier);
     // TODO: don't sleep - prevents plugin.send_heartbeat(true) from executing immediately
     // this call should be debounced instead as in plugin.enough_time_passed()
     plugin.set_many_items()?;
