@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::enums::KiCadObjectType;
@@ -19,11 +19,17 @@ use thiserror::Error;
 // pub struct WakaKicad<'a> {
 pub struct WakaKicad {
   pub kicad: Option<KiCad>,
-  // TODO: get somebody way smarter than me to help me uncomment this field
+  // TODO: open a waka-kicad issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
+  pub time: Duration,
   pub active: bool,
+  pub last_activity_time: Duration,
+  // the last time a heartbeat was sent
+  pub last_sent_time: Duration,
+  // the last file that was sent
+  pub last_sent_file: String,
 }
 
 // TODO: heartbeat - a new file is being focused on
@@ -80,6 +86,7 @@ impl<'a> WakaKicad {
     // debug!("{:?}", k);
     Ok(())
   }
+  // TODO: plugin only works in PCB editor - get open documents, not open board
   pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
   // pub fn await_get_open_board(&mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
@@ -105,13 +112,34 @@ impl<'a> WakaKicad {
   }
   pub fn set_active(&mut self, active: bool) {
     if active != self.active {
-      debug!("self.active = {active}");
+      debug!("active = {active}");
     }
     self.active = active;
+    if active == true {
+      self.active_since_time = self.current_time();
+      debug!("active_since_time = {:?}", self.active_since_time);
+    }
   }
+  pub fn check_inactive(&mut self) -> Result<(), anyhow::Error> {
+    let secs_until_inactive = Duration::from_secs(120).checked_sub(self.current_time() - self.last_activity_time);
+    if let Some(secs) = secs_until_inactive {
+      debug!("You will be considered inactive in {:?}", secs);
+    } else {
+      debug!("You are currently inactive!");
+      self.set_active(false);
+    }
+    Ok(())
+  }
+  pub fn current_time(&self) -> Duration {
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
+  }
+  pub fn set_current_time(&mut self, t: Duration) {
+    self.time = t;
+  }
+  // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    info!("Setting board items...");
+    info!("Attempting to set board items...");
     // TODO: safety
     // let board = self.board.as_ref().unwrap();
     let board = self.await_get_open_board()?.unwrap();
@@ -129,16 +157,20 @@ impl<'a> WakaKicad {
     // check
     // if self.items.iter().count() > 0 && self.items != items_new {
     if self.items != items_new {
-      info!("Old items differ from new items!");
-      for (kot, vec) in items_new.iter() {
+      self.items = items_new;
+      info!("Board items changed!");
+      for (kot, vec) in self.items.iter() {
         debug!("{:?} = [{}]", kot, vec.len());
       }
       self.set_active(true);
+    } else {
+      info!("Board items did not change!");
     }
     // set
-    self.items = items_new;
-    info!("Set board items!");
     Ok(())
+  }
+  pub fn send_heartbeat(&self) {
+    // TODO
   }
   pub fn cfg_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");

@@ -367,7 +367,7 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 [[package]]
 name = "kicad-api-rs"
 version = "0.0.1"
-source = "git+https://gitlab.com/sporeball/kicad-rs.git#809a969a92360b4d6f1be78ea5e637190824103e"
+source = "git+https://gitlab.com/sporeball/kicad-rs.git#f3bb5b8c8fa0b2cc5429e944ca7686e69560100b"
 dependencies = [
  "enum-as-inner",
  "nng",

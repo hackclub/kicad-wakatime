@@ -1,3 +1,6 @@
+use std::thread::sleep;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use waka_kicad::FindProcess;
 // use std::fs;
 // use std::process;
@@ -20,6 +23,16 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.check_cli_installed()?;
   plugin.get_api_key()?;
   plugin.await_connect_to_kicad()?;
-  plugin.set_many_items()?;
+  // main loop
+  loop {
+    plugin.set_current_time(plugin.current_time());
+    // TODO
+    // let board = plugin.await_get_open_board()?.unwrap();
+    // let identifier = board.doc.identifier;
+    plugin.set_many_items()?;
+    plugin.check_inactive()?;
+    sleep(Duration::from_secs(5));
+  }
+  // TODO: this is unreachable
   Ok(())
 }
