@@ -1,7 +1,7 @@
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use waka_kicad::traits::FindProcess;
+use waka_kicad::traits::DebugProcesses;
 // use std::fs;
 // use std::process;
 use env_logger::Env;
@@ -16,8 +16,7 @@ fn main() -> Result<(), anyhow::Error> {
   debug!("(os, arch) = {:?}", waka_kicad::env_consts());
   let mut sys = System::new_all();
   sys.refresh_all();
-  debug!("eeschema -> {:?}", sys.find_process("eeschema"));
-  debug!("pcbnew -> {:?}", sys.find_process("pcbnew"));
+  sys.debug_processes();
   info!("Initializing waka-kicad...");
   let mut plugin = WakaKicad::default();
   plugin.check_cli_installed()?;
