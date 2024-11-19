@@ -110,40 +110,25 @@ impl<'a> WakaKicad {
     debug!("{:?}", board);
     Ok(board)
   }
-  // TODO: might not be needed - pretty sure wakatime handles inactivity?
-  // pub fn set_active(&mut self, active: bool) {
-  //   if active != self.active {
-  //     debug!("active = {active}");
-  //   }
-  //   self.active = active;
-  //   if active == true {
-  //     self.active_since_time = self.current_time();
-  //     debug!("active_since_time = {:?}", self.active_since_time);
-  //   }
-  // }
-  // pub fn check_inactive(&mut self) -> Result<(), anyhow::Error> {
-  //   let secs_until_inactive = Duration::from_secs(900).checked_sub(self.current_time() - self.last_activity_time);
-  //   if let Some(secs) = secs_until_inactive {
-  //     debug!("You will be considered inactive in {:?}", secs);
-  //   } else {
-  //     debug!("You are currently inactive!");
-  //     self.set_active(false);
-  //   }
-  //   Ok(())
-  // }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
   }
   pub fn set_current_time(&mut self, t: Duration) {
     self.time = t;
   }
+  /// Return the amount of time passed since the last heartbeat.
+  pub fn time_passed(&self) -> Duration {
+    self.current_time() - self.last_sent_time
+  }
+  /// Returns `true` if more than 2 minutes have passed since the last heartbeat.
   pub fn enough_time_passed(&self) -> bool {
-    self.current_time() > self.last_sent_time + Duration::from_secs(120)
+    // self.current_time() > self.last_sent_time + Duration::from_secs(120)
+    self.time_passed() > Duration::from_secs(120)
   }
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    info!("Attempting to set board items...");
+    info!("Reading board items...");
     // TODO: safety
     // let board = self.board.as_ref().unwrap();
     let board = self.await_get_open_board()?.unwrap();
@@ -158,23 +143,37 @@ impl<'a> WakaKicad {
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
     items_new.insert(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
     items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
-    // check
     // if self.items.iter().count() > 0 && self.items != items_new {
     if self.items != items_new {
-      self.items = items_new;
       info!("Board items changed!");
+      self.items = items_new;
+      // since the items changed, it might be time to send a heartbeat
+      self.maybe_send_heartbeat(false);
       for (kot, vec) in self.items.iter() {
         debug!("{:?} = [{}]", kot, vec.len());
       }
-      // info!("A heartbeat should be sent (is_file_saved = false)");
-      // self.send_heartbeat(false);
     } else {
       info!("Board items did not change!");
     }
     // set
     Ok(())
   }
+  /// Send a heartbeat if conditions are met.
+  /// This is an analog of vscode-wakatime's `private onEvent(isWrite)`.
+  pub fn maybe_send_heartbeat(&mut self, is_file_saved: bool) {
+    if self.last_sent_time == Duration::ZERO {
+      debug!("No heartbeats have been sent since the plugin opened")
+    } else {
+      debug!("It has been {:?} since the last heartbeat", self.time_passed());
+    }
+    // TODO: a new file is being focused on
+    // TODO: the currently focused file has been saved
+    if self.enough_time_passed() {
+      self.send_heartbeat(is_file_saved);
+    }
+  }
   pub fn send_heartbeat(&mut self, is_file_saved: bool) {
+    // info!("Sending heartbeat...");
     self.last_sent_time = self.current_time();
     // TODO
   }

@@ -12,6 +12,8 @@ use waka_kicad::WakaKicad;
 use sysinfo::System;
 
 fn main() -> Result<(), anyhow::Error> {
+  // pre-initialization
+  // TODO: clap
   env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
   debug!("(os, arch) = {:?}", waka_kicad::env_consts());
   let mut sys = System::new_all();
@@ -28,14 +30,9 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO
     // let board = plugin.await_get_open_board()?.unwrap();
     // let identifier = board.doc.identifier;
+    // TODO: don't sleep - prevents plugin.send_heartbeat(true) from executing immediately
+    // this call should be debounced instead as in plugin.enough_time_passed()
     plugin.set_many_items()?;
-    // TODO: a new file is being focused on
-    // TODO: the currently focused file has been saved
-    // TODO: this block is not correct
-    if plugin.enough_time_passed() {
-      info!("A heartbeat should be sent (enough time passed)");
-      plugin.send_heartbeat(false);
-    }
     sleep(Duration::from_secs(5));
   }
   // TODO: this is unreachable
