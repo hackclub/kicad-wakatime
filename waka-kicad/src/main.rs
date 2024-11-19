@@ -24,6 +24,9 @@ fn main() -> Result<(), anyhow::Error> {
     while let Ok(event) = rx.recv() {
       match event {
         Ok(event) => {
+          // skip duplicate
+          // TODO: all three platforms?
+          let _ = rx.recv();
           info!("Got event!");
           info!("event = {:?}", event);
         },

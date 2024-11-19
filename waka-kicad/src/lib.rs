@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ini::Ini;
+use kicad::KiCadError;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
@@ -38,8 +39,6 @@ pub struct WakaKicad {
   pub last_sent_file: String,
   pub first_iteration_finished: bool,
 }
-
-// TODO: "KiCad is busy and cannot respond to API requests right now"
 
 // impl<'a> WakaKicad<'a> {
 impl<'a> WakaKicad {
@@ -171,13 +170,18 @@ impl<'a> WakaKicad {
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     // TODO: safety
-    // let board = self.board.as_ref().unwrap();
     let board = self.await_get_open_board()?.unwrap();
+    // TODO: this is horrible
+    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) {};
     let tracks = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE])?;
     // TODO: is this the right variant?
+    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) {};
     let arc_tracks = board.get_items(&[KiCadObjectType::KOT_PCB_ARC])?;
+    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) {};
     let vias = board.get_items(&[KiCadObjectType::KOT_PCB_VIA])?;
+    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) {};
     let footprint_instances = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT])?;
+    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) {};
     let pads = board.get_items(&[KiCadObjectType::KOT_PCB_PAD])?;
     items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
