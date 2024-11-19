@@ -32,6 +32,7 @@ pub struct WakaKicad {
   pub last_sent_time: Duration,
   // the last file that was sent
   pub last_sent_file: String,
+  pub first_iteration_finished: bool,
 }
 
 // TODO: "KiCad is busy and cannot respond to API requests right now"
@@ -174,6 +175,12 @@ impl<'a> WakaKicad {
   /// Send a heartbeat if conditions are met.
   /// This is an analog of vscode-wakatime's `private onEvent(isWrite)`.
   pub fn maybe_send_heartbeat(&mut self, is_file_saved: bool) {
+    // on the first iteration of the main loop, multiple values used to determine
+    // whether a heartbeat should be sent are updated from their defaults, so any
+    // heartbeats that would be sent are false positives that should be ignored
+    if self.first_iteration_finished == false {
+      return;
+    }
     if self.last_sent_time == Duration::ZERO {
       debug!("No heartbeats have been sent since the plugin opened")
     } else {

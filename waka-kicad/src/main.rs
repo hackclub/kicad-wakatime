@@ -33,6 +33,7 @@ fn main() -> Result<(), anyhow::Error> {
     // TODO: don't sleep - prevents plugin.send_heartbeat(true) from executing immediately
     // this call should be debounced instead as in plugin.enough_time_passed()
     plugin.set_many_items()?;
+    plugin.first_iteration_finished = true;
     sleep(Duration::from_secs(5));
   }
   // TODO: this is unreachable
