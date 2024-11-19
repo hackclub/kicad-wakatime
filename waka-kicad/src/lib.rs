@@ -24,16 +24,15 @@ pub struct WakaKicad {
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
   pub time: Duration,
-  pub active: bool,
-  pub last_activity_time: Duration,
+  // pub active: bool,
+  // pub last_activity_time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
   // the last file that was sent
   pub last_sent_file: String,
 }
 
-// TODO: heartbeat - a new file is being focused on
-// TODO: heartbeat - the currently focused file has been saved
+// TODO: "KiCad is busy and cannot respond to API requests right now"
 
 // impl<'a> WakaKicad<'a> {
 impl<'a> WakaKicad {
@@ -110,31 +109,35 @@ impl<'a> WakaKicad {
     debug!("{:?}", board);
     Ok(board)
   }
-  pub fn set_active(&mut self, active: bool) {
-    if active != self.active {
-      debug!("active = {active}");
-    }
-    self.active = active;
-    if active == true {
-      self.active_since_time = self.current_time();
-      debug!("active_since_time = {:?}", self.active_since_time);
-    }
-  }
-  pub fn check_inactive(&mut self) -> Result<(), anyhow::Error> {
-    let secs_until_inactive = Duration::from_secs(120).checked_sub(self.current_time() - self.last_activity_time);
-    if let Some(secs) = secs_until_inactive {
-      debug!("You will be considered inactive in {:?}", secs);
-    } else {
-      debug!("You are currently inactive!");
-      self.set_active(false);
-    }
-    Ok(())
-  }
+  // TODO: might not be needed - pretty sure wakatime handles inactivity?
+  // pub fn set_active(&mut self, active: bool) {
+  //   if active != self.active {
+  //     debug!("active = {active}");
+  //   }
+  //   self.active = active;
+  //   if active == true {
+  //     self.active_since_time = self.current_time();
+  //     debug!("active_since_time = {:?}", self.active_since_time);
+  //   }
+  // }
+  // pub fn check_inactive(&mut self) -> Result<(), anyhow::Error> {
+  //   let secs_until_inactive = Duration::from_secs(900).checked_sub(self.current_time() - self.last_activity_time);
+  //   if let Some(secs) = secs_until_inactive {
+  //     debug!("You will be considered inactive in {:?}", secs);
+  //   } else {
+  //     debug!("You are currently inactive!");
+  //     self.set_active(false);
+  //   }
+  //   Ok(())
+  // }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
   }
   pub fn set_current_time(&mut self, t: Duration) {
     self.time = t;
+  }
+  pub fn enough_time_passed(&self) -> bool {
+    self.current_time() > self.last_sent_time + Duration::from_secs(120)
   }
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
@@ -162,14 +165,16 @@ impl<'a> WakaKicad {
       for (kot, vec) in self.items.iter() {
         debug!("{:?} = [{}]", kot, vec.len());
       }
-      self.set_active(true);
+      // info!("A heartbeat should be sent (is_file_saved = false)");
+      // self.send_heartbeat(false);
     } else {
       info!("Board items did not change!");
     }
     // set
     Ok(())
   }
-  pub fn send_heartbeat(&self) {
+  pub fn send_heartbeat(&mut self, is_file_saved: bool) {
+    self.last_sent_time = self.current_time();
     // TODO
   }
   pub fn cfg_path(&self) -> PathBuf {

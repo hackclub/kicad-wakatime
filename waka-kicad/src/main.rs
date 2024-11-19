@@ -30,7 +30,12 @@ fn main() -> Result<(), anyhow::Error> {
     // let board = plugin.await_get_open_board()?.unwrap();
     // let identifier = board.doc.identifier;
     plugin.set_many_items()?;
-    plugin.check_inactive()?;
+    // TODO: a new file is being focused on
+    // TODO: the currently focused file has been saved
+    if plugin.enough_time_passed() {
+      info!("A heartbeat should be sent (enough time passed)");
+      plugin.send_heartbeat(false);
+    }
     sleep(Duration::from_secs(5));
   }
   // TODO: this is unreachable
