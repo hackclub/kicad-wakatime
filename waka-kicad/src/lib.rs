@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 // use std::rc::Rc;
 // use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
@@ -13,6 +13,7 @@ use log::debug;
 use log::info;
 use log::error;
 // use mouse_position::mouse_position::Mouse;
+use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use thiserror::Error;
 
 pub mod traits;
@@ -24,7 +25,8 @@ pub struct WakaKicad {
   // TODO: open a waka-kicad issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
   // currently focused file
-  pub file: String,
+  pub filename: String,
+  // pub file_watcher: RecommendedWatcher,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
   pub time: Duration,
@@ -116,13 +118,36 @@ impl<'a> WakaKicad {
     // TODO: other variants
     if let Identifier::BoardFilename(board_filename) = identifier {
       debug!("board_filename = {board_filename}");
-      if self.file != board_filename {
+      if self.filename != board_filename {
         info!("Identifier changed!");
-        self.file = board_filename;
         // since the focused file changed, it might be time to send a heartbeat
-        self.maybe_send_heartbeat(false);
+        // self.filename is not actually updated here, which means that
+        // self.maybe_send_heartbeat() can use the difference as a condition in its check
+        self.maybe_send_heartbeat(board_filename, false);
+        // also begin watching the focused file for changes
+        // self.watch_file(board_filename);
       }
     }
+  }
+  pub fn watch_file(&mut self, f: String) -> notify::Result<()> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut watcher = notify::recommended_watcher(tx)?;
+    watcher.watch(Path::new(&f), RecursiveMode::NonRecursive)?;
+    debug!("Watcher set up to watch {f} for changes");
+    std::thread::spawn(move || {
+      for res in rx {
+        match res {
+          Ok(event) => {
+            info!("Current file saved!");
+            debug!("event = {:?}", event);
+          },
+          Err(e) => {
+            error!("File watch error: {:?}", e);
+          }
+        }
+      }
+    });
+    Ok(())
   }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
@@ -162,7 +187,7 @@ impl<'a> WakaKicad {
       info!("Board items changed!");
       self.items = items_new;
       // since the items changed, it might be time to send a heartbeat
-      self.maybe_send_heartbeat(false);
+      self.maybe_send_heartbeat(self.filename.clone(), false);
       for (kot, vec) in self.items.iter() {
         debug!("{:?} = [{}]", kot, vec.len());
       }
@@ -174,7 +199,11 @@ impl<'a> WakaKicad {
   }
   /// Send a heartbeat if conditions are met.
   /// This is an analog of vscode-wakatime's `private onEvent(isWrite)`.
-  pub fn maybe_send_heartbeat(&mut self, is_file_saved: bool) {
+  pub fn maybe_send_heartbeat(
+    &mut self,
+    filename: String,
+    is_file_saved: bool
+  ) {
     // on the first iteration of the main loop, multiple values used to determine
     // whether a heartbeat should be sent are updated from their defaults, so any
     // heartbeats that would be sent are false positives that should be ignored
@@ -182,18 +211,22 @@ impl<'a> WakaKicad {
       return;
     }
     if self.last_sent_time == Duration::ZERO {
-      debug!("No heartbeats have been sent since the plugin opened")
+      debug!("No heartbeats have been sent since the plugin opened");
     } else {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
     // TODO: a new file is being focused on
     // TODO: the currently focused file has been saved
-    if self.enough_time_passed() {
+    if self.enough_time_passed() ||
+    self.filename != filename {
+      self.filename = filename;
       self.send_heartbeat(is_file_saved);
     }
   }
   pub fn send_heartbeat(&mut self, is_file_saved: bool) {
-    // info!("Sending heartbeat...");
+    info!("Sending heartbeat...");
+    info!("last_sent_time = {:?}", self.last_sent_time);
+    info!("last_sent_file = {:?}", self.last_sent_file);
     self.last_sent_time = self.current_time();
     // TODO
   }
