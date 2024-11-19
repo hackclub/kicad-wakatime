@@ -3,11 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 // use std::rc::Rc;
 // use std::sync::{Arc, Mutex, RwLock};
-use std::thread::sleep;
+use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
-use kicad::protos::base_types::document_specifier::Identifier;
+use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
@@ -24,9 +24,11 @@ pub struct WakaKicad {
   pub kicad: Option<KiCad>,
   // TODO: open a waka-kicad issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
-  // currently focused file
+  // filename of currently focused file
   pub filename: String,
-  // pub file_watcher: RecommendedWatcher,
+  // path of currently focused file
+  pub path: PathBuf,
+  pub file_watcher: Option<RecommendedWatcher>,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
   pub time: Duration,
@@ -102,7 +104,7 @@ impl<'a> WakaKicad {
       //   error!("Ensure that a board is open in the Schematic Editor or PCB Editor");
       //   return Err(PluginError::NoOpenBoard.into())
       // }
-      info!("Waiting for open board... ({times})");
+      debug!("Waiting for open board... ({times})");
       board = k.get_open_board().ok();
       if board.is_some() {
         break;
@@ -110,43 +112,44 @@ impl<'a> WakaKicad {
       sleep(Duration::from_secs(5));
       times += 1;
     }
-    info!("Found open board!");
+    debug!("Found open board!");
     debug!("{:?}", board);
     Ok(board)
   }
-  pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) {
+  // pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) -> Result<(), anyhow::Error> {
+  pub fn set_current_file_from_document_specifier(
+    &mut self,
+    specifier: DocumentSpecifier,
+  ) -> Result<(), anyhow::Error> {
+    // filename
     // TODO: other variants
-    if let Identifier::BoardFilename(board_filename) = identifier {
-      debug!("board_filename = {board_filename}");
-      if self.filename != board_filename {
-        info!("Identifier changed!");
-        // since the focused file changed, it might be time to send a heartbeat
-        // self.filename is not actually updated here, which means that
-        // self.maybe_send_heartbeat() can use the difference as a condition in its check
-        self.maybe_send_heartbeat(board_filename, false);
-        // also begin watching the focused file for changes
-        // self.watch_file(board_filename);
+    let Some(Identifier::BoardFilename(board_filename)) = specifier.identifier else { unreachable!(); };
+    // path
+    let path = PathBuf::from(specifier.project.unwrap().path).join(board_filename.clone());
+    debug!("path = {:?}", path);
+    // debug!("board_filename = {board_filename}");
+    if self.filename != board_filename {
+      info!("Identifier changed!");
+      // since the focused file changed, it might be time to send a heartbeat.
+      // self.filename and self.path are not actually updated here unless they
+      // were empty before, so self.maybe_send_heartbeat() can use the difference
+      // as a condition in its check
+      if self.filename != String::new() {
+        self.maybe_send_heartbeat(board_filename.clone(), false);
+      } else {
+        self.filename = board_filename.clone();
       }
+      debug!("filename = {:?}", board_filename.clone());
+      // also begin watching the focused file for changes
+      self.watch_file(path)?;
     }
+    Ok(())
   }
-  pub fn watch_file(&mut self, f: String) -> notify::Result<()> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = notify::recommended_watcher(tx)?;
-    watcher.watch(Path::new(&f), RecursiveMode::NonRecursive)?;
-    debug!("Watcher set up to watch {f} for changes");
-    std::thread::spawn(move || {
-      for res in rx {
-        match res {
-          Ok(event) => {
-            info!("Current file saved!");
-            debug!("event = {:?}", event);
-          },
-          Err(e) => {
-            error!("File watch error: {:?}", e);
-          }
-        }
-      }
-    });
+  pub fn watch_file(&mut self, path: PathBuf) -> notify::Result<()> {
+    // let path = PathBuf::from("/Users/lux/file.txt");
+    info!("Watching {:?} for changes...", path);
+    self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
+    info!("Watcher set up to watch {:?} for changes", path);
     Ok(())
   }
   pub fn current_time(&self) -> Duration {
@@ -167,7 +170,6 @@ impl<'a> WakaKicad {
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    info!("Reading board items...");
     // TODO: safety
     // let board = self.board.as_ref().unwrap();
     let board = self.await_get_open_board()?.unwrap();
@@ -184,7 +186,7 @@ impl<'a> WakaKicad {
     items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
     // if self.items.iter().count() > 0 && self.items != items_new {
     if self.items != items_new {
-      info!("Board items changed!");
+      debug!("Board items changed!");
       self.items = items_new;
       // since the items changed, it might be time to send a heartbeat
       self.maybe_send_heartbeat(self.filename.clone(), false);
@@ -192,7 +194,7 @@ impl<'a> WakaKicad {
         debug!("{:?} = [{}]", kot, vec.len());
       }
     } else {
-      info!("Board items did not change!");
+      debug!("Board items did not change!");
     }
     // set
     Ok(())
@@ -215,7 +217,6 @@ impl<'a> WakaKicad {
     } else {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
-    // TODO: a new file is being focused on
     // TODO: the currently focused file has been saved
     if self.enough_time_passed() ||
     self.filename != filename {
