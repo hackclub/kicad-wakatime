@@ -161,14 +161,16 @@ impl<'a> WakaKicad {
     info!("Watcher set up to watch {:?} for changes", path);
     Ok(())
   }
-  pub fn try_recv(&self) -> Result<(), anyhow::Error> {
+  pub fn try_recv(&mut self) -> Result<(), anyhow::Error> {
     let Some(ref rx) = self.rx else { unreachable!(); };
     let recv = rx.try_recv();
-    if recv.is_ok() {
+    if recv.is_ok() { // watched file was saved
       // skip duplicate
       // TODO: use debouncer instead
       let _ = rx.try_recv();
-      info!("recv = {:?}", recv);
+      // TODO: variant check?
+      info!("File saved!");
+      self.maybe_send_heartbeat(self.filename.clone(), true);
     }
     Ok(())
   }
@@ -192,7 +194,7 @@ impl<'a> WakaKicad {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     // TODO: safety
     let board = self.await_get_open_board()?.unwrap();
-    // TODO: this is horrible
+    // TODO: still fails sometimes!
     while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) {};
     let tracks = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE])?;
     // TODO: is this the right variant?
@@ -243,7 +245,8 @@ impl<'a> WakaKicad {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
     // TODO: the currently focused file has been saved
-    if self.enough_time_passed() ||
+    if is_file_saved ||
+    self.enough_time_passed() ||
     self.filename != filename {
       self.filename = filename;
       self.send_heartbeat(is_file_saved);
