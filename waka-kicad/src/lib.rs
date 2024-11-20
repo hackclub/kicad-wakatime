@@ -32,7 +32,7 @@ pub struct WakaKicad {
   // filename of currently focused file
   pub filename: String,
   // path of currently focused file
-  pub path: PathBuf,
+  pub full_path: PathBuf,
   pub file_watcher: Option<RecommendedWatcher>,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
@@ -115,7 +115,7 @@ impl<'a> WakaKicad {
       //   error!("Ensure that a board is open in the Schematic Editor or PCB Editor");
       //   return Err(PluginError::NoOpenBoard.into())
       // }
-      debug!("Waiting for open board... ({times})");
+      // debug!("Waiting for open board... ({times})");
       board = k.get_open_board().ok();
       if board.is_some() {
         break;
@@ -123,8 +123,8 @@ impl<'a> WakaKicad {
       sleep(Duration::from_secs(5));
       times += 1;
     }
-    debug!("Found open board!");
-    debug!("{:?}", board);
+    // debug!("Found open board!");
+    // debug!("{:?}", board);
     Ok(board)
   }
   // pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) -> Result<(), anyhow::Error> {
@@ -132,12 +132,14 @@ impl<'a> WakaKicad {
     &mut self,
     specifier: DocumentSpecifier,
   ) -> Result<(), anyhow::Error> {
+    debug!("Updating current file...");
     // filename
     // TODO: other variants
     let Some(Identifier::BoardFilename(board_filename)) = specifier.identifier else { unreachable!(); };
     // path
-    let path = PathBuf::from(specifier.project.unwrap().path).join(board_filename.clone());
-    debug!("path = {:?}", path);
+    let path = specifier.project.unwrap().path;
+    // full path
+    let full_path = PathBuf::from(path).join(board_filename.clone());
     // debug!("board_filename = {board_filename}");
     if self.filename != board_filename {
       info!("Identifier changed!");
@@ -149,10 +151,14 @@ impl<'a> WakaKicad {
         self.maybe_send_heartbeat(board_filename.clone(), false)?;
       } else {
         self.filename = board_filename.clone();
+        self.full_path = full_path.clone();
       }
-      debug!("filename = {:?}", board_filename.clone());
+      debug!("filename = {:?}", self.filename);
+      debug!("full_path = {:?}", self.full_path);
       // also begin watching the focused file for changes
-      self.watch_file(path)?;
+      self.watch_file(full_path)?;
+    } else {
+      debug!("Identifier did not change!")
     }
     Ok(())
   }
@@ -200,6 +206,7 @@ impl<'a> WakaKicad {
   }
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
+    debug!("Updating board items...");
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     // TODO: safety
     let board = self.await_get_open_board()?.unwrap();
@@ -229,11 +236,11 @@ impl<'a> WakaKicad {
     if self.items != items_new {
       debug!("Board items changed!");
       self.items = items_new;
-      // since the items changed, it might be time to send a heartbeat
-      self.maybe_send_heartbeat(self.filename.clone(), false)?;
       for (kot, vec) in self.items.iter() {
         debug!("{:?} = [{}]", kot, vec.len());
       }
+      // since the items changed, it might be time to send a heartbeat
+      self.maybe_send_heartbeat(self.filename.clone(), false)?;
     } else {
       debug!("Board items did not change!");
     }
@@ -247,10 +254,12 @@ impl<'a> WakaKicad {
     filename: String,
     is_file_saved: bool
   ) -> Result<(), anyhow::Error> {
+    debug!("Determining whether to send heartbeat...");
     // on the first iteration of the main loop, multiple values used to determine
     // whether a heartbeat should be sent are updated from their defaults, so any
     // heartbeats that would be sent are false positives that should be ignored
     if !self.first_iteration_finished {
+      debug!("Not sending heartbeat (first iteration)");
       return Ok(());
     }
     if self.last_sent_time == Duration::ZERO {
@@ -258,12 +267,13 @@ impl<'a> WakaKicad {
     } else {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
-    // TODO: the currently focused file has been saved
     if is_file_saved ||
     self.enough_time_passed() ||
     self.filename != filename {
       self.filename = filename;
       self.send_heartbeat(is_file_saved)?;
+    } else {
+      debug!("Not sending heartbeat (no conditions met)");
     }
     Ok(())
   }
@@ -273,10 +283,11 @@ impl<'a> WakaKicad {
       warn!("Heartbeats are disabled (using --disable-heartbeats)");
       return Ok(())
     }
+    // TODO
+    self.last_sent_time = self.current_time();
+    self.last_sent_file = self.full_path.clone().into_os_string().into_string().unwrap();
     info!("last_sent_time = {:?}", self.last_sent_time);
     info!("last_sent_file = {:?}", self.last_sent_file);
-    self.last_sent_time = self.current_time();
-    // TODO
     Ok(())
   }
   pub fn cfg_path(&self) -> PathBuf {

@@ -1,3 +1,6 @@
+use std::thread::sleep;
+use std::time::Duration;
+
 use waka_kicad::{WakaKicad, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
@@ -15,6 +18,9 @@ pub struct Args {
   debug: bool,
   #[clap(long)]
   disable_heartbeats: bool,
+  /// Sleep for 5 seconds after every iteration
+  #[clap(long)]
+  sleepy: bool,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -54,7 +60,9 @@ fn main() -> Result<(), anyhow::Error> {
     plugin.set_many_items()?;
     plugin.try_recv()?;
     plugin.first_iteration_finished = true;
-    // sleep(Duration::from_secs(5));
+    if args.sleepy {
+      sleep(Duration::from_secs(5));
+    }
   }
 
   // TODO: this is unreachable
