@@ -50,7 +50,6 @@ fn main() -> Result<(), anyhow::Error> {
   // main loop
   loop {
     plugin.set_current_time(plugin.current_time());
-    // TODO
     let board = plugin.await_get_open_board()?.unwrap();
     // let Some(identifier) = board.doc.identifier else { unreachable!(); };
     let specifier = board.doc;

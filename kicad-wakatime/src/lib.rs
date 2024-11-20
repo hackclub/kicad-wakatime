@@ -21,8 +21,11 @@ use thiserror::Error;
 
 pub mod traits;
 
+const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 #[derive(Default)]
 pub struct Plugin {
+  pub version: &'static str,
   pub disable_heartbeats: bool,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -49,6 +52,7 @@ impl<'a> Plugin {
     disable_heartbeats: bool
   ) -> Self {
     Plugin {
+      version: PLUGIN_VERSION,
       disable_heartbeats,
       ..Default::default()
     }
@@ -284,9 +288,9 @@ impl<'a> Plugin {
     }
     let full_path = self.full_path.clone().into_os_string().into_string().unwrap();
     let quoted_full_path = format!("\"{full_path}\"");
+    let plugin_version = self.version;
     let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
-    // TODO: don't hardcode 0.0.0
-    let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/0.0.0\"");
+    let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/{plugin_version}\"");
     let api_key = self.get_api_key()?;
     let quoted_api_key = format!("\"{api_key}\"");
     // TODO: metrics?
