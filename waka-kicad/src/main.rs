@@ -1,13 +1,10 @@
-use std::thread::sleep;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use waka_kicad::{WakaKicad, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
-use clap::{ArgAction, Parser};
+use clap::Parser;
 use env_logger::Env;
 use log::debug;
-use log::error;
+// use log::error;
 use log::info;
 use sysinfo::System;
 

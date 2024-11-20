@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 // use std::rc::Rc;
 // use std::sync::{Arc, Mutex, RwLock};
-use std::thread::{sleep, JoinHandle};
+use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ini::Ini;
-use kicad::KiCadError;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
@@ -147,7 +146,7 @@ impl<'a> WakaKicad {
       // were empty before, so self.maybe_send_heartbeat() can use the difference
       // as a condition in its check
       if self.filename != String::new() {
-        self.maybe_send_heartbeat(board_filename.clone(), false);
+        self.maybe_send_heartbeat(board_filename.clone(), false)?;
       } else {
         self.filename = board_filename.clone();
       }
@@ -180,7 +179,7 @@ impl<'a> WakaKicad {
       let _ = rx.try_recv();
       // TODO: variant check?
       info!("File saved!");
-      self.maybe_send_heartbeat(self.filename.clone(), true);
+      self.maybe_send_heartbeat(self.filename.clone(), true)?;
     }
     Ok(())
   }
@@ -231,7 +230,7 @@ impl<'a> WakaKicad {
       debug!("Board items changed!");
       self.items = items_new;
       // since the items changed, it might be time to send a heartbeat
-      self.maybe_send_heartbeat(self.filename.clone(), false);
+      self.maybe_send_heartbeat(self.filename.clone(), false)?;
       for (kot, vec) in self.items.iter() {
         debug!("{:?} = [{}]", kot, vec.len());
       }
@@ -247,12 +246,12 @@ impl<'a> WakaKicad {
     &mut self,
     filename: String,
     is_file_saved: bool
-  ) {
+  ) -> Result<(), anyhow::Error> {
     // on the first iteration of the main loop, multiple values used to determine
     // whether a heartbeat should be sent are updated from their defaults, so any
     // heartbeats that would be sent are false positives that should be ignored
-    if self.first_iteration_finished == false {
-      return;
+    if !self.first_iteration_finished {
+      return Ok(());
     }
     if self.last_sent_time == Duration::ZERO {
       debug!("No heartbeats have been sent since the plugin opened");
@@ -264,12 +263,13 @@ impl<'a> WakaKicad {
     self.enough_time_passed() ||
     self.filename != filename {
       self.filename = filename;
-      self.send_heartbeat(is_file_saved);
+      self.send_heartbeat(is_file_saved)?;
     }
+    Ok(())
   }
   pub fn send_heartbeat(&mut self, is_file_saved: bool) -> Result<(), anyhow::Error> {
     info!("Sending heartbeat...");
-    if self.disable_heartbeats == true {
+    if self.disable_heartbeats {
       warn!("Heartbeats are disabled (using --disable-heartbeats)");
       return Ok(())
     }
