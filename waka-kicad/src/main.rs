@@ -4,16 +4,30 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use waka_kicad::{WakaKicad, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
+use clap::{ArgAction, Parser};
 use env_logger::Env;
 use log::debug;
 use log::error;
 use log::info;
 use sysinfo::System;
 
+/// WakaTime plugin for KiCAD nightly
+#[derive(Parser)]
+pub struct Args {
+  #[clap(long)]
+  debug: bool,
+  #[clap(long)]
+  disable_heartbeats: bool,
+}
+
 fn main() -> Result<(), anyhow::Error> {
   // pre-initialization
-  // TODO: clap
-  env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+  let args = Args::parse();
+  let log_level = match args.debug {
+    true => "debug",
+    false => "info",
+  };
+  env_logger::Builder::from_env(Env::default().default_filter_or(log_level)).init();
   debug!("(os, arch) = {:?}", waka_kicad::env_consts());
   let mut sys = System::new_all();
   sys.refresh_all();
@@ -21,7 +35,10 @@ fn main() -> Result<(), anyhow::Error> {
 
   // initialization
   info!("Initializing waka-kicad...");
-  let mut plugin = WakaKicad::default();
+  // let mut plugin = WakaKicad::default();
+  let mut plugin = WakaKicad::new(
+    args.disable_heartbeats,
+  );
   plugin.create_file_watcher()?;
   // plugin.file_watcher = Some(watcher);
   plugin.check_cli_installed()?;

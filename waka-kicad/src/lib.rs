@@ -13,6 +13,7 @@ use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifie
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
+use log::warn;
 use log::error;
 // use mouse_position::mouse_position::Mouse;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
@@ -23,6 +24,7 @@ pub mod traits;
 #[derive(Default)]
 // pub struct WakaKicad<'a> {
 pub struct WakaKicad {
+  pub disable_heartbeats: bool,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
   pub kicad: Option<KiCad>,
@@ -45,6 +47,14 @@ pub struct WakaKicad {
 
 // impl<'a> WakaKicad<'a> {
 impl<'a> WakaKicad {
+  pub fn new(
+    disable_heartbeats: bool
+  ) -> Self {
+    WakaKicad {
+      disable_heartbeats,
+      ..Default::default()
+    }
+  }
   pub fn check_cli_installed(&self) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
     info!("WakaTime CLI path: {:?}", cli_path);
@@ -194,6 +204,7 @@ impl<'a> WakaKicad {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     // TODO: safety
     let board = self.await_get_open_board()?.unwrap();
+    // TODO: write cooler function
     let tracks = loop {
       if let Ok(tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) { break tracks; }
     };
@@ -256,12 +267,17 @@ impl<'a> WakaKicad {
       self.send_heartbeat(is_file_saved);
     }
   }
-  pub fn send_heartbeat(&mut self, is_file_saved: bool) {
+  pub fn send_heartbeat(&mut self, is_file_saved: bool) -> Result<(), anyhow::Error> {
     info!("Sending heartbeat...");
+    if self.disable_heartbeats == true {
+      warn!("Heartbeats are disabled (using --disable-heartbeats)");
+      return Ok(())
+    }
     info!("last_sent_time = {:?}", self.last_sent_time);
     info!("last_sent_file = {:?}", self.last_sent_file);
     self.last_sent_time = self.current_time();
     // TODO
+    Ok(())
   }
   pub fn cfg_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
