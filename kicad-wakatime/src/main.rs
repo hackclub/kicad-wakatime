@@ -1,7 +1,7 @@
 use std::thread::sleep;
 use std::time::Duration;
 
-use waka_kicad::{WakaKicad, traits::DebugProcesses};
+use kicad_wakatime::{Plugin, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
 use clap::Parser;
@@ -31,15 +31,14 @@ fn main() -> Result<(), anyhow::Error> {
     false => "info",
   };
   env_logger::Builder::from_env(Env::default().default_filter_or(log_level)).init();
-  debug!("(os, arch) = {:?}", waka_kicad::env_consts());
+  debug!("(os, arch) = {:?}", kicad_wakatime::env_consts());
   let mut sys = System::new_all();
   sys.refresh_all();
   sys.debug_processes();
 
   // initialization
-  info!("Initializing waka-kicad...");
-  // let mut plugin = WakaKicad::default();
-  let mut plugin = WakaKicad::new(
+  info!("Initializing kicad-wakatime...");
+  let mut plugin = Plugin::new(
     args.disable_heartbeats,
   );
   plugin.create_file_watcher()?;

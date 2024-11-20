@@ -1,1 +1,1 @@
-# waka-kicad
+# kicad-wakatime

@@ -22,13 +22,12 @@ use thiserror::Error;
 pub mod traits;
 
 #[derive(Default)]
-// pub struct WakaKicad<'a> {
-pub struct WakaKicad {
+pub struct Plugin {
   pub disable_heartbeats: bool,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
   pub kicad: Option<KiCad>,
-  // TODO: open a waka-kicad issue for help uncommenting this field
+  // TODO: open an issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
   // filename of currently focused file
   pub filename: String,
@@ -45,12 +44,11 @@ pub struct WakaKicad {
   pub first_iteration_finished: bool,
 }
 
-// impl<'a> WakaKicad<'a> {
-impl<'a> WakaKicad {
+impl<'a> Plugin {
   pub fn new(
     disable_heartbeats: bool
   ) -> Self {
-    WakaKicad {
+    Plugin {
       disable_heartbeats,
       ..Default::default()
     }
@@ -90,7 +88,7 @@ impl<'a> WakaKicad {
       // }
       info!("Connecting to KiCAD... ({times})");
       k = KiCad::new(KiCadConnectionConfig {
-        client_name: String::from("waka-kicad"),
+        client_name: String::from("kicad-wakatime"),
         ..Default::default()
       }).ok();
       if k.is_some() {
@@ -288,7 +286,7 @@ impl<'a> WakaKicad {
     let quoted_full_path = format!("\"{full_path}\"");
     let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
     // TODO: don't hardcode 0.0.0
-    let quoted_user_agent = format!("\"kicad/{kicad_version} waka-kicad/0.0.0\"");
+    let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/0.0.0\"");
     let api_key = self.get_api_key()?;
     let quoted_api_key = format!("\"{api_key}\"");
     // TODO: metrics?
