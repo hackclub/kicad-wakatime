@@ -18,31 +18,16 @@ fn main() -> Result<(), anyhow::Error> {
   let mut sys = System::new_all();
   sys.refresh_all();
   sys.debug_processes();
-  let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
-  let mut watcher = notify::recommended_watcher(tx)?;
-  let thr = std::thread::spawn(move || {
-    while let Ok(event) = rx.recv() {
-      match event {
-        Ok(event) => {
-          // skip duplicate
-          // TODO: all three platforms?
-          let _ = rx.recv();
-          info!("Got event!");
-          info!("event = {:?}", event);
-        },
-        Err(e) => {
-          error!("{:?}", e);
-        }
-      }
-    }
-  });
-  // thr.join().unwrap();
+
+  // initialization
   info!("Initializing waka-kicad...");
   let mut plugin = WakaKicad::default();
-  plugin.file_watcher = Some(watcher);
+  plugin.create_file_watcher()?;
+  // plugin.file_watcher = Some(watcher);
   plugin.check_cli_installed()?;
   plugin.get_api_key()?;
   plugin.await_connect_to_kicad()?;
+
   // main loop
   loop {
     plugin.set_current_time(plugin.current_time());
@@ -53,9 +38,11 @@ fn main() -> Result<(), anyhow::Error> {
     // plugin.set_current_file_from_identifier(identifier)?;
     plugin.set_current_file_from_document_specifier(specifier)?;
     plugin.set_many_items()?;
+    plugin.try_recv()?;
     plugin.first_iteration_finished = true;
     // sleep(Duration::from_secs(5));
   }
+
   // TODO: this is unreachable
   Ok(())
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, Sender};
 // use std::rc::Rc;
 // use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{sleep, JoinHandle};
@@ -22,6 +23,8 @@ pub mod traits;
 #[derive(Default)]
 // pub struct WakaKicad<'a> {
 pub struct WakaKicad {
+  pub tx: Option<Sender<notify::Result<notify::Event>>>,
+  pub rx: Option<Receiver<notify::Result<notify::Event>>>,
   pub kicad: Option<KiCad>,
   // TODO: open a waka-kicad issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
@@ -144,11 +147,29 @@ impl<'a> WakaKicad {
     }
     Ok(())
   }
-  pub fn watch_file(&mut self, path: PathBuf) -> notify::Result<()> {
+  pub fn create_file_watcher(&mut self) -> Result<(), anyhow::Error> {
+    let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
+    self.tx = Some(tx.clone());
+    self.rx = Some(rx);
+    self.file_watcher = Some(notify::recommended_watcher(tx)?);
+    Ok(())
+  }
+  pub fn watch_file(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
     // let path = PathBuf::from("/Users/lux/file.txt");
     info!("Watching {:?} for changes...", path);
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
     info!("Watcher set up to watch {:?} for changes", path);
+    Ok(())
+  }
+  pub fn try_recv(&self) -> Result<(), anyhow::Error> {
+    let Some(ref rx) = self.rx else { unreachable!(); };
+    let recv = rx.try_recv();
+    if recv.is_ok() {
+      // skip duplicate
+      // TODO: use debouncer instead
+      let _ = rx.try_recv();
+      info!("recv = {:?}", recv);
+    }
     Ok(())
   }
   pub fn current_time(&self) -> Duration {
