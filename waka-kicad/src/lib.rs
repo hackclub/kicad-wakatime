@@ -1,3 +1,4 @@
+use core::str;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -68,15 +69,15 @@ impl<'a> WakaKicad {
     }
     Ok(())
   }
-  pub fn get_api_key(&mut self) -> Result<(), anyhow::Error> {
+  pub fn get_api_key(&mut self) -> Result<String, anyhow::Error> {
     let cfg_path = self.cfg_path();
     // TODO: remove expects
     // TODO: prompt for and store API key if not found
     let cfg = Ini::load_from_file(cfg_path).expect("Could not get ~/.wakatime.cfg!");
     let cfg_settings = cfg.section(Some("settings")).expect("Could not get settings from ~/.wakatime.cfg!");
     let api_key = cfg_settings.get("api_key").expect("Could not get API key!");
-    debug!("api_key = {api_key}");
-    Ok(())
+    // debug!("api_key = {api_key}");
+    Ok(api_key.to_string())
   }
   pub fn await_connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
@@ -283,9 +284,41 @@ impl<'a> WakaKicad {
       warn!("Heartbeats are disabled (using --disable-heartbeats)");
       return Ok(())
     }
-    // TODO
+    let full_path = self.full_path.clone().into_os_string().into_string().unwrap();
+    let quoted_full_path = format!("\"{full_path}\"");
+    let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
+    // TODO: don't hardcode 0.0.0
+    let quoted_user_agent = format!("\"kicad/{kicad_version} waka-kicad/0.0.0\"");
+    let api_key = self.get_api_key()?;
+    let quoted_api_key = format!("\"{api_key}\"");
+    // TODO: metrics?
+    // TODO: api_url?
+    // TODO: is_unsaved_entity
+    // create process
+    let cli_path = self.cli_path(env_consts());
+    let mut cli = std::process::Command::new(cli_path);
+    // cli.args(cli_args.split(' ').collect::<Vec<&str>>());
+    cli.args(&["--entity", &quoted_full_path]);
+    cli.args(&["--plugin", &quoted_user_agent]);
+    cli.args(&["--key", &quoted_api_key]);
+    if is_file_saved {
+      cli.arg("--write");
+    }
+    info!("Executing WakaTime CLI...");
+    // cli.spawn().expect("Could not spawn WakaTime CLI!");
+    let cli_output = cli.output()
+      .expect("Could not execute WakaTime CLI!");
+    let cli_status = cli_output.status;
+    let cli_stdout = cli_output.stdout;
+    let cli_stderr = cli_output.stderr;
+    // TODO: handle failing statuses
+    info!("cli_status = {cli_status}");
+    info!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
+    info!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
+    // heartbeat should have been sent at this point
+    info!("Finished!");
     self.last_sent_time = self.current_time();
-    self.last_sent_file = self.full_path.clone().into_os_string().into_string().unwrap();
+    self.last_sent_file = full_path;
     info!("last_sent_time = {:?}", self.last_sent_time);
     info!("last_sent_file = {:?}", self.last_sent_file);
     Ok(())
