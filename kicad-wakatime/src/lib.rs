@@ -51,6 +51,9 @@ impl<'a> Plugin {
   pub fn new(
     disable_heartbeats: bool
   ) -> Self {
+    if disable_heartbeats {
+      warn!("Heartbeats are disabled (using --disable-heartbeats)");
+    }
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
