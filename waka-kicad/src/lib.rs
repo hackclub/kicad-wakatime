@@ -194,18 +194,22 @@ impl<'a> WakaKicad {
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     // TODO: safety
     let board = self.await_get_open_board()?.unwrap();
-    // TODO: still fails sometimes!
-    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) {};
-    let tracks = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE])?;
-    // TODO: is this the right variant?
-    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) {};
-    let arc_tracks = board.get_items(&[KiCadObjectType::KOT_PCB_ARC])?;
-    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) {};
-    let vias = board.get_items(&[KiCadObjectType::KOT_PCB_VIA])?;
-    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) {};
-    let footprint_instances = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT])?;
-    while let Err(KiCadError::ApiError(_e)) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) {};
-    let pads = board.get_items(&[KiCadObjectType::KOT_PCB_PAD])?;
+    let tracks = loop {
+      if let Ok(tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) { break tracks; }
+    };
+    let arc_tracks = loop {
+      // TODO: is this the right variant?
+      if let Ok(arc_tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) { break arc_tracks; }
+    };
+    let vias = loop {
+      if let Ok(vias) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) { break vias; }
+    };
+    let footprint_instances = loop {
+      if let Ok(footprint_instances) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) { break footprint_instances; }
+    };
+    let pads = loop {
+      if let Ok(pads) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) { break pads; }
+    };
     items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
