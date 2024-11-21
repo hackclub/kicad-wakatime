@@ -50,12 +50,25 @@ fn main() -> Result<(), anyhow::Error> {
   // main loop
   loop {
     plugin.set_current_time(plugin.current_time());
-    let board = plugin.await_get_open_board()?.unwrap();
-    // let Some(identifier) = board.doc.identifier else { unreachable!(); };
-    let specifier = board.doc;
-    // plugin.set_current_file_from_identifier(identifier)?;
-    plugin.set_current_file_from_document_specifier(specifier)?;
-    plugin.set_many_items()?;
+    let k = plugin.kicad.as_ref().unwrap();
+    let schematic = k.get_open_documents(kicad::DocumentType::DOCTYPE_SCHEMATIC);
+    let board = k.get_open_documents(kicad::DocumentType::DOCTYPE_PCB);
+    // the KiCAD IPC API does not work properly with schematics as of November 2024
+    // (cf. kicad-rs/issues/3), so for the schematic editor, we have to read the
+    // focused file raw
+    if let Ok(schematic) = schematic {
+      let schematic_ds = schematic.first().unwrap();
+      debug!("schematic_ds = {:?}", schematic_ds);
+      // plugin.set_current_file_from_document_specifier(schematic_ds)?;
+      // TODO
+    }
+    // for the PCB editor, we can instead use the Rust bindings proper
+    if let Ok(board) = board {
+      let board_ds = board.first().unwrap();
+      debug!("board_ds = {:?}", board_ds);
+      plugin.set_current_file_from_document_specifier(board_ds.clone())?;
+      plugin.set_many_items()?;
+    }
     plugin.try_recv()?;
     plugin.first_iteration_finished = true;
     if args.sleepy {

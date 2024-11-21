@@ -106,7 +106,7 @@ impl<'a> Plugin {
     }
     self.kicad = k;
     info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
-    // debug!("{:?}", k);
+    debug!("self.kicad = {:?}", self.kicad);
     Ok(())
   }
   // TODO: plugin only works in PCB editor - get open documents, not open board
