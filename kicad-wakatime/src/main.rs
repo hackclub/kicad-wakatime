@@ -4,6 +4,7 @@ use std::time::Duration;
 use kicad_wakatime::{Plugin, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
+use active_win_pos_rs::get_active_window;
 use clap::Parser;
 use env_logger::Env;
 use log::debug;
@@ -49,6 +50,7 @@ fn main() -> Result<(), anyhow::Error> {
 
   // main loop
   loop {
+    debug!("{:?}", get_active_window());
     plugin.set_current_time(plugin.current_time());
     let k = plugin.kicad.as_ref().unwrap();
     let schematic = k.get_open_documents(kicad::DocumentType::DOCTYPE_SCHEMATIC);
