@@ -37,12 +37,16 @@ fn main() -> Result<(), anyhow::Error> {
   sys.refresh_all();
   sys.debug_processes();
 
+  let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
+
   // initialization
   info!("Initializing kicad-wakatime...");
   let mut plugin = Plugin::new(
     args.disable_heartbeats,
   );
-  plugin.create_file_watcher()?;
+  plugin.tx = Some(tx);
+  plugin.rx = Some(rx);
+  // plugin.create_file_watcher()?;
   // plugin.file_watcher = Some(watcher);
   plugin.check_cli_installed()?;
   plugin.get_api_key()?;
@@ -54,17 +58,14 @@ fn main() -> Result<(), anyhow::Error> {
     let w = plugin.get_active_window();
     debug!("w.title = {}", w.title);
     let k = plugin.kicad.as_ref().unwrap();
-    // let schematic = k.get_open_documents(kicad::DocumentType::DOCTYPE_SCHEMATIC);
-    // let board = k.get_open_documents(kicad::DocumentType::DOCTYPE_PCB);
     if w.title.contains("Schematic Editor") {
       let schematic = k.get_open_schematic()?;
       // the KiCAD IPC API does not work properly with schematics as of November 2024
-      // (cf. kicad-rs/issues/3), so for the schematic editor, we have to read the
-      // focused file raw
+      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
+      // modification without save cannot be sent
       let schematic_ds = schematic.doc;
-      debug!("schematic_ds = {:?}", schematic_ds);
-      // plugin.set_current_file_from_document_specifier(schematic_ds)?;
-      // TODO
+      debug!("schematic_ds = {:?}", schematic_ds.clone());
+      plugin.set_current_file_from_document_specifier(schematic_ds.clone())?;
     }
     else if w.title.contains("PCB Editor") {
       // for the PCB editor, we can instead use the Rust bindings proper
@@ -74,9 +75,6 @@ fn main() -> Result<(), anyhow::Error> {
       plugin.set_current_file_from_document_specifier(board_ds.clone())?;
       plugin.set_many_items()?;
     } else {
-      info!("Waiting for project...");
-      sleep(Duration::from_secs(5));
-      continue;
     }
     plugin.try_recv()?;
     plugin.first_iteration_finished = true;

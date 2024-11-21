@@ -38,6 +38,8 @@ pub struct Plugin {
   pub filename: String,
   // path of currently focused file
   pub full_path: PathBuf,
+  pub full_paths: HashMap<String, PathBuf>,
+  pub warned_filenames: Vec<String>,
   pub file_watcher: Option<RecommendedWatcher>,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   // pub mouse_position: Mouse,
@@ -105,7 +107,7 @@ impl<'a> Plugin {
       //   error!("Ensure KiCAD is open and the KiCAD API is enabled (Preferences -> Plugins -> Enable KiCAD API)");
       //   return Err(PluginError::CouldNotConnect.into())
       // }
-      info!("Connecting to KiCAD... ({times})");
+      info!("Waiting for KiCAD... ({times})");
       k = KiCad::new(KiCadConnectionConfig {
         client_name: String::from("kicad-wakatime"),
         ..Default::default()
@@ -145,6 +147,16 @@ impl<'a> Plugin {
     // debug!("{:?}", board);
     Ok(board)
   }
+  pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {
+    self.full_paths.get(&filename)
+  }
+  pub fn get_filename_from_document_specifier(
+    &self,
+    specifier: &DocumentSpecifier,
+  ) -> String {
+    let Some(Identifier::BoardFilename(ref filename)) = specifier.identifier else { unreachable!(); };
+    filename.to_string()
+  }
   // pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) -> Result<(), anyhow::Error> {
   pub fn set_current_file_from_document_specifier(
     &mut self,
@@ -153,43 +165,73 @@ impl<'a> Plugin {
     debug!("Updating current file...");
     // filename
     // TODO: other variants
-    let Some(Identifier::BoardFilename(board_filename)) = specifier.identifier else { unreachable!(); };
-    // path
-    let path = specifier.project.unwrap().path;
+    let filename = self.get_filename_from_document_specifier(&specifier);
+    // info!("filename = {}", filename.clone());
+    // info!("Current file updated to {}", filename.clone());
     // full path
-    let full_path = PathBuf::from(path).join(board_filename.clone());
+    let project = specifier.project.0;
+    let full_path = match project {
+      // in the PCB editor, the specifier's project field is populated
+      Some(project) => {
+        let full_path = PathBuf::from(project.path).join(filename.clone());
+        let file_stem = full_path.file_stem().unwrap().to_str().unwrap();
+        self.full_paths.insert(
+          format!("{file_stem}.kicad_sch"),
+          full_path.parent().unwrap().join(format!("{file_stem}.kicad_sch"))
+        );
+        self.full_paths.insert(
+          format!("{file_stem}.kicad_pcb"),
+          full_path.parent().unwrap().join(format!("{file_stem}.kicad_pcb"))
+        );
+        full_path
+      },
+      // in the schematic editor, the specifier's project field is not populated.
+      // ask the user to switch to the PCB editor for this schematic so that the
+      // full path can be stored
+      None => {
+        if self.get_full_path(filename.clone()).is_none() {
+          if !self.warned_filenames.contains(&filename) {
+            warn!("Schematic \"{}\" cannot be tracked yet!", filename.clone());
+            warn!("Please switch to the PCB editor first!");
+            warn!("You can then track time spent in both the schematic editor and PCB editor for this project");
+            self.warned_filenames.push(filename.clone());
+          }
+          return Ok(())
+        }
+        self.get_full_path(filename.clone()).unwrap().to_path_buf()
+      }
+    };
     // debug!("board_filename = {board_filename}");
-    if self.filename != board_filename {
-      info!("Identifier changed!");
+    if self.filename != filename {
+      info!("Focused file changed!");
       // since the focused file changed, it might be time to send a heartbeat.
       // self.filename and self.path are not actually updated here unless they
       // were empty before, so self.maybe_send_heartbeat() can use the difference
       // as a condition in its check
+      info!("Filename: {}", filename.clone());
       if self.filename != String::new() {
-        self.maybe_send_heartbeat(board_filename.clone(), false)?;
+        self.maybe_send_heartbeat(filename.clone(), false)?;
       } else {
-        self.filename = board_filename.clone();
+        self.filename = filename.clone();
         self.full_path = full_path.clone();
       }
-      debug!("filename = {:?}", self.filename);
-      debug!("full_path = {:?}", self.full_path);
+      debug!("filename = {:?}", self.filename.clone());
+      debug!("full_path = {:?}", self.full_path.clone());
       // also begin watching the focused file for changes
-      self.watch_file(full_path)?;
+      self.watch_file(self.get_full_path(filename.clone()).unwrap().to_path_buf())?;
     } else {
-      debug!("Identifier did not change!")
+      debug!("Focused file did not change!")
     }
     Ok(())
   }
   pub fn create_file_watcher(&mut self) -> Result<(), anyhow::Error> {
-    let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
-    self.tx = Some(tx.clone());
-    self.rx = Some(rx);
-    self.file_watcher = Some(notify::recommended_watcher(tx)?);
+    self.file_watcher = Some(notify::recommended_watcher(self.tx.clone().unwrap())?);
     Ok(())
   }
   pub fn watch_file(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
     // let path = PathBuf::from("/Users/lux/file.txt");
     info!("Watching {:?} for changes...", path);
+    self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
     info!("Watcher set up to watch {:?} for changes", path);
     Ok(())
