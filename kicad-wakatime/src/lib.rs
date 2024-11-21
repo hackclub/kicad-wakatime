@@ -1,12 +1,13 @@
 use core::str;
 use std::collections::HashMap;
-use std::fs;
+use std::{fs, process};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 // use std::rc::Rc;
 // use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use active_win_pos_rs::{get_active_window, ActiveWindow};
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
@@ -27,6 +28,7 @@ const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
+  // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
   pub kicad: Option<KiCad>,
@@ -59,6 +61,16 @@ impl<'a> Plugin {
       disable_heartbeats,
       ..Default::default()
     }
+  }
+  pub fn get_active_window(&self) -> ActiveWindow {
+    let active_window = get_active_window().expect("Could not get active window!");
+    if active_window.title == "" {
+      error!("Could not get title of active window!");
+      error!("If you are on macOS, please give kicad-wakatime Screen Recording permission");
+      error!("(System Settings -> Privacy and Security -> Screen Recording)");
+      process::exit(1);
+    }
+    active_window
   }
   pub fn check_cli_installed(&self) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
