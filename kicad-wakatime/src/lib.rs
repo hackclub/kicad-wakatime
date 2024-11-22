@@ -120,6 +120,16 @@ impl<'a> Plugin {
     }
     self.kicad = k;
     info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
+    // if the loop was immediately able to find KiCAD,
+    // that means KiCAD was already open when the plugin started.
+    // KiCAD needs to be opened after kicad-wakatime; otherwise, active-win-pos-rs
+    // will focus on the shell forever, instead of the actual focused windows
+    // TODO: get the plugin to spawn KiCAD instead?
+    if times == 0 {
+      error!("KiCAD was opened before kicad-wakatime!");
+      error!("Please close KiCAD, restart kicad-wakatime, then open KiCAD last");
+      process::exit(1);
+    }
     debug!("self.kicad = {:?}", self.kicad);
     Ok(())
   }
@@ -230,7 +240,7 @@ impl<'a> Plugin {
   }
   pub fn watch_file(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
     // let path = PathBuf::from("/Users/lux/file.txt");
-    info!("Watching {:?} for changes...", path);
+    // info!("Watching {:?} for changes...", path);
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
     info!("Watcher set up to watch {:?} for changes", path);
