@@ -6,3 +6,5 @@ target/
 *.pdb
 
 kicad-wakatime.code-workspace
+
+.DS_Store

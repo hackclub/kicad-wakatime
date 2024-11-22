@@ -3,6 +3,10 @@ name = "kicad-wakatime"
 version = "0.0.0"
 edition = "2021"
 
+[package.metadata.bundle]
+name = "kicad-wakatime"
+identifier = "com.hackclub.kicad-wakatime"
+
 [dependencies]
 active-win-pos-rs = "0.8.3"
 anyhow = "1.0.93"
@@ -17,3 +21,4 @@ notify = "7.0.0"
 rust-ini = "0.21.1"
 sysinfo = "0.32.0"
 thiserror = "2.0.3"
+
