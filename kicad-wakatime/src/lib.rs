@@ -8,14 +8,34 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
+use fltk::group::experimental::Terminal;
 use ini::Ini;
+use fltk::browser::*;
+use fltk::button::*;
+use fltk::dialog::*;
+use fltk::enums::*;
+use fltk::frame::*;
+use fltk::group::*;
+use fltk::group::experimental::*;
+use fltk::image::*;
+use fltk::input::*;
+use fltk::menu::*;
+use fltk::misc::*;
+use fltk::output::*;
+use fltk::{prelude::*, *};
+use fltk::table::*;
+use fltk::text::*;
+use fltk::tree::*;
+use fltk::valuator::*;
+use fltk::widget::*;
+use fltk::window::*;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
-use log::warn;
 use log::error;
+use log::warn;
 // use mouse_position::mouse_position::Mouse;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use thiserror::Error;
@@ -24,11 +44,50 @@ pub mod traits;
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+#[derive(Clone, Debug)]
+pub struct Ui {
+  pub main_window: Window,
+  pub status_box: Output,
+  pub exit_button: Button,
+  pub log_window: Terminal,
+  pub last_heartbeat_box: Output,
+}
+
+impl Ui {
+  pub fn make_window() -> Self {
+    let mut main_window = Window::new(389, 286, 382, 260, None);
+    main_window.set_label(r#"kicad-wakatime ^_^"#);
+    main_window.set_type(WindowType::Double);
+    main_window.make_resizable(true);
+    let mut status_box = Output::new(60, 16, 92, 22, None);
+    status_box.set_label(r#"status:"#);
+    status_box.set_frame(FrameType::NoBox);
+    let mut exit_button = Button::new(303, 15, 64, 22, None);
+    exit_button.set_label(r#"exit"#);
+    exit_button.set_callback(|_| {});
+    let mut log_window = Terminal::new(15, 85, 352, 159, None);
+    log_window.set_label(r#"log:"#);
+    log_window.set_align(unsafe {std::mem::transmute(5)});
+    main_window.resizable(&log_window);
+    let mut last_heartbeat_box = Output::new(108, 40, 92, 22, None);
+    last_heartbeat_box.set_label(r#"last heartbeat:"#);
+    last_heartbeat_box.set_frame(FrameType::NoBox);
+    Self {
+      main_window,
+      status_box,
+      exit_button,
+      log_window,
+      last_heartbeat_box
+    }
+  }
+}
+
 #[derive(Default)]
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
   pub sleepy: bool,
+  pub ui: Option<Ui>,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -57,9 +116,6 @@ impl<'a> Plugin {
     disable_heartbeats: bool,
     sleepy: bool,
   ) -> Self {
-    if disable_heartbeats {
-      warn!("Heartbeats are disabled (using --disable-heartbeats)");
-    }
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
@@ -67,26 +123,26 @@ impl<'a> Plugin {
       ..Default::default()
     }
   }
-  pub fn get_active_window(&self) -> Result<ActiveWindow, ()> {
+  pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
     let active_window = get_active_window();
     if active_window.clone().is_ok_and(|w| w.title == "") {
-      error!("Could not get title of active window!");
-      error!("If you are on macOS, please give your terminal Screen Recording permission");
-      error!("(System Settings -> Privacy and Security -> Screen Recording)");
-      process::exit(1);
+      self.dual_error(String::from("Could not get title of active window!"));
+      self.dual_error(String::from("If you are on macOS, please give kicad-wakatime Screen Recording permission"));
+      self.dual_error(String::from("(System Settings -> Privacy and Security -> Screen Recording)"));
+      // process::exit(1);
     }
     active_window
   }
-  pub fn check_cli_installed(&self) -> Result<(), anyhow::Error> {
+  pub fn check_cli_installed(&mut self) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
-    info!("WakaTime CLI path: {:?}", cli_path);
+    self.dual_info(format!("WakaTime CLI path: {:?}", cli_path));
     if fs::exists(cli_path)? {
-      info!("File exists!");
+      self.dual_info(String::from("File exists!"));
       // TODO: update to latest version if needed
     } else {
       // TODO: download latest version
-      error!("File does not exist!");
-      error!("Ensure this file exists before proceeding");
+      self.dual_error(String::from("File does not exist!"));
+      self.dual_error(String::from("Ensure this file exists before proceeding"));
       return Err(PluginError::CliNotFound.into())
     }
     Ok(())
@@ -108,14 +164,14 @@ impl<'a> Plugin {
     }).ok();
     if k.is_some() {
       self.kicad = k;
-      info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
+      self.dual_info(format!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap()));
       debug!("self.kicad = {:?}", self.kicad);
-      Ok(())
     } else {
-      error!("Could not connect to KiCAD!");
-      error!("Please open KiCAD before opening kicad-wakatime!");
-      process::exit(1);
+      self.dual_error(String::from("Could not connect to KiCAD!"));
+      self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
+      // process::exit(1);
     }
+    Ok(())
   }
   // TODO: plugin only works in PCB editor - get open documents, not open board
   pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
@@ -185,9 +241,9 @@ impl<'a> Plugin {
       None => {
         if self.get_full_path(filename.clone()).is_none() {
           if !self.warned_filenames.contains(&filename) {
-            warn!("Schematic \"{}\" cannot be tracked yet!", filename.clone());
-            warn!("Please switch to the PCB editor first!");
-            warn!("You can then track time spent in both the schematic editor and PCB editor for this project");
+            self.dual_warn(format!("Schematic \"{}\" cannot be tracked yet!", filename.clone()));
+            self.dual_warn(String::from("Please switch to the PCB editor first!"));
+            self.dual_warn(String::from("You can then track time spent in both the schematic editor and PCB editor for this project"));
             self.warned_filenames.push(filename.clone());
           }
           return Ok(())
@@ -197,12 +253,12 @@ impl<'a> Plugin {
     };
     // debug!("board_filename = {board_filename}");
     if self.filename != filename {
-      info!("Focused file changed!");
+      self.dual_info(String::from("Focused file changed!"));
       // since the focused file changed, it might be time to send a heartbeat.
       // self.filename and self.path are not actually updated here unless they
       // were empty before, so self.maybe_send_heartbeat() can use the difference
       // as a condition in its check
-      info!("Filename: {}", filename.clone());
+      self.dual_info(format!("Filename: {}", filename.clone()));
       if self.filename != String::new() {
         self.maybe_send_heartbeat(filename.clone(), false)?;
       } else {
@@ -227,7 +283,7 @@ impl<'a> Plugin {
     // info!("Watching {:?} for changes...", path);
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
-    info!("Watcher set up to watch {:?} for changes", path);
+    self.dual_info(format!("Watcher set up to watch {:?} for changes", path));
     Ok(())
   }
   pub fn try_recv(&mut self) -> Result<(), anyhow::Error> {
@@ -238,7 +294,7 @@ impl<'a> Plugin {
       // TODO: use debouncer instead
       let _ = rx.try_recv();
       // TODO: variant check?
-      info!("File saved!");
+      self.dual_info(String::from("File saved!"));
       self.maybe_send_heartbeat(self.filename.clone(), true)?;
     }
     Ok(())
@@ -332,9 +388,9 @@ impl<'a> Plugin {
     Ok(())
   }
   pub fn send_heartbeat(&mut self, is_file_saved: bool) -> Result<(), anyhow::Error> {
-    info!("Sending heartbeat...");
+    self.dual_info(String::from("Sending heartbeat..."));
     if self.disable_heartbeats {
-      warn!("Heartbeats are disabled (using --disable-heartbeats)");
+      self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
       return Ok(())
     }
     let full_path = self.full_path.clone().into_os_string().into_string().unwrap();
@@ -357,7 +413,7 @@ impl<'a> Plugin {
     if is_file_saved {
       cli.arg("--write");
     }
-    info!("Executing WakaTime CLI...");
+    self.dual_info(String::from("Executing WakaTime CLI..."));
     // cli.spawn().expect("Could not spawn WakaTime CLI!");
     let cli_output = cli.output()
       .expect("Could not execute WakaTime CLI!");
@@ -365,15 +421,15 @@ impl<'a> Plugin {
     let cli_stdout = cli_output.stdout;
     let cli_stderr = cli_output.stderr;
     // TODO: handle failing statuses
-    info!("cli_status = {cli_status}");
-    info!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
-    info!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
+    debug!("cli_status = {cli_status}");
+    debug!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
+    debug!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
     // heartbeat should have been sent at this point
-    info!("Finished!");
+    self.dual_info(String::from("Finished!"));
     self.last_sent_time = self.current_time();
     self.last_sent_file = full_path;
-    info!("last_sent_time = {:?}", self.last_sent_time);
-    info!("last_sent_file = {:?}", self.last_sent_file);
+    debug!("last_sent_time = {:?}", self.last_sent_time);
+    debug!("last_sent_file = {:?}", self.last_sent_file);
     Ok(())
   }
   pub fn cfg_path(&self) -> PathBuf {
@@ -388,6 +444,21 @@ impl<'a> Plugin {
       _o => format!("wakatime-cli-{os}-{arch}"),
     };
     home_dir.join(".wakatime").join(cli_name)
+  }
+  pub fn dual_info(&mut self, s: String) {
+    let Some(ref mut ui) = self.ui else { todo!(); };
+    info!("{}", s);
+    ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
+  }
+  pub fn dual_warn(&mut self, s: String) {
+    let Some(ref mut ui) = self.ui else { todo!(); };
+    warn!("{}", s);
+    ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
+  }
+  pub fn dual_error(&mut self, s: String) {
+    let Some(ref mut ui) = self.ui else { todo!(); };
+    error!("{}", s);
+    ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
 }
 

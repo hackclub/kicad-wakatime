@@ -1,3 +1,4 @@
+use kicad_wakatime::Ui;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -30,9 +31,8 @@ use fltk::tree::*;
 use fltk::valuator::*;
 use fltk::widget::*;
 use fltk::window::*;
-use log::debug;
-// use log::error;
 use log::info;
+use log::debug;
 use sysinfo::System;
 
 /// WakaTime plugin for KiCAD nightly
@@ -45,14 +45,6 @@ pub struct Args {
   /// Sleep for 5 seconds after every iteration
   #[clap(long)]
   sleepy: bool,
-}
-
-pub struct Ui {
-  pub main_window: Window,
-  pub status_box: Output,
-  pub exit_button: Button,
-  pub log_window: Terminal,
-  pub last_heartbeat_box: Output,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -79,12 +71,15 @@ fn main() -> Result<(), anyhow::Error> {
 
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 
+  let fltk_app = fltk::app::App::default();
+
   // initialization
-  info!("Initializing kicad-wakatime...");
   let mut plugin = Plugin::new(
     args.disable_heartbeats,
     args.sleepy,
   );
+  plugin.ui = Some(Ui::make_window());
+  plugin.dual_info(String::from("Initializing kicad-wakatime..."));
 
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
@@ -92,52 +87,35 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.get_api_key()?;
   plugin.connect_to_kicad()?;
 
-  let fltk_app = fltk::app::App::default();
+  plugin.ui.as_mut().unwrap().main_window.end();
+  plugin.ui.as_mut().unwrap().main_window.show();
 
-  let mut main_window = Window::new(389, 286, 382, 260, None);
-  main_window.set_label(r#"kicad-wakatime ^_^"#);
-  main_window.set_type(WindowType::Double);
-  main_window.make_resizable(true);
-  let mut status_box = Output::new(60, 16, 92, 22, None);
-  status_box.set_label(r#"status:"#);
-  status_box.set_frame(FrameType::NoBox);
-  let mut exit_button = Button::new(303, 15, 64, 22, None);
-  exit_button.set_label(r#"exit"#);
-  exit_button.set_callback(|_| {});
-  let mut log_window = Terminal::new(15, 85, 352, 159, None);
-  log_window.set_label(r#"log:"#);
-  log_window.set_align(unsafe {std::mem::transmute(5)});
-  main_window.resizable(&log_window);
-  let mut last_heartbeat_box = Output::new(108, 40, 92, 22, None);
-  last_heartbeat_box.set_label(r#"last heartbeat:"#);
-  last_heartbeat_box.set_frame(FrameType::NoBox);
-  main_window.end();
-  main_window.show();
+  // dual_debug(&mut log_window, format!("it works!"));
 
   // while fltk_app.wait() {
   fltk::app::add_idle3(move |_| {
     plugin.set_current_time(plugin.current_time());
     let w = plugin.get_active_window();
     let Ok(w) = w else { return; };
-    let k = plugin.kicad.as_ref().unwrap();
+    let Some(ref k) = plugin.kicad else { return; };
     if w.title.contains("Schematic Editor") {
       let schematic = k.get_open_schematic().expect("no schematics are open");
       // the KiCAD IPC API does not work properly with schematics as of November 2024
       // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
       // modification without save cannot be sent
       let schematic_ds = schematic.doc;
-      debug!("schematic_ds = {:?}", schematic_ds.clone());
+      // plugin.dual_debug(format!("schematic_ds = {:?}", schematic_ds.clone()));
       plugin.set_current_file_from_document_specifier(schematic_ds.clone());
     }
     else if w.title.contains("PCB Editor") {
       // for the PCB editor, we can instead use the Rust bindings proper
       let board = k.get_open_board().expect("no boards are open");
       let board_ds = board.doc;
-      debug!("board_ds = {:?}", board_ds.clone());
+      // plugin.dual_debug(format!("board_ds = {:?}", board_ds.clone()));
       plugin.set_current_file_from_document_specifier(board_ds.clone());
       plugin.set_many_items();
     } else {
-      debug!("w.title = {}", w.title);
+      // plugin.dual_debug(format!("w.title = {}", w.title));
     }
     plugin.try_recv();
     plugin.first_iteration_finished = true;
