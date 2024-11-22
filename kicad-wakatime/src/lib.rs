@@ -68,7 +68,7 @@ impl<'a> Plugin {
     let active_window = get_active_window().expect("Could not get active window!");
     if active_window.title == "" {
       error!("Could not get title of active window!");
-      error!("If you are on macOS, please give kicad-wakatime Screen Recording permission");
+      error!("If you are on macOS, please give your terminal Screen Recording permission");
       error!("(System Settings -> Privacy and Security -> Screen Recording)");
       process::exit(1);
     }
