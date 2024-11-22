@@ -1,16 +1,51 @@
 use std::thread::sleep;
 use std::time::Duration;
 
+use cocoa::appkit::NSApp;
+use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
 use kicad_wakatime::{Plugin, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
 use active_win_pos_rs::get_active_window;
 use clap::Parser;
+use cocoa::appkit::NSApplication;
 use env_logger::Env;
 use log::debug;
 // use log::error;
 use log::info;
 use sysinfo::System;
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
+
+#[derive(Default)]
+struct App {
+  window: Option<Window>,
+}
+
+impl ApplicationHandler for App {
+  fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+    self.window = Some(event_loop.create_window(Window::default_attributes()).unwrap());
+  }
+
+  fn window_event(
+    &mut self,
+    event_loop: &ActiveEventLoop,
+    window_id: WindowId,
+    event: WindowEvent,
+  ) {
+    match event {
+      WindowEvent::CloseRequested => {
+        event_loop.exit();
+      },
+      WindowEvent::RedrawRequested => {
+        self.window.as_ref().unwrap().request_redraw();
+      },
+      _ => (),
+    }
+  }
+}
 
 /// WakaTime plugin for KiCAD nightly
 #[derive(Parser)]
@@ -36,6 +71,20 @@ fn main() -> Result<(), anyhow::Error> {
   let mut sys = System::new_all();
   sys.refresh_all();
   sys.debug_processes();
+
+  #[cfg(target_os = "macos")]
+  unsafe {
+    let ns_app = NSApplication::sharedApplication(cocoa::base::nil);
+    ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
+    ns_app.finishLaunching();
+    ns_app.run();
+    println!("got here");
+  }
+
+  // let winit_event_loop = EventLoop::new().unwrap();
+  // winit_event_loop.set_control_flow(ControlFlow::Poll);
+  // let mut winit_app = App::default();
+  // winit_event_loop.run_app(&mut winit_app);
 
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 

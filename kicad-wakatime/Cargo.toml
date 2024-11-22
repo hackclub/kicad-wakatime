@@ -11,6 +11,7 @@ identifier = "com.hackclub.kicad-wakatime"
 active-win-pos-rs = "0.8.3"
 anyhow = "1.0.93"
 clap = { version = "4.5.21", features = ["derive"] }
+cocoa = "0.26.0"
 env_logger = "0.11.5"
 home = "0.5.9"
 # kicad-api-rs = "0.0.1"
@@ -21,4 +22,5 @@ notify = "7.0.0"
 rust-ini = "0.21.1"
 sysinfo = "0.32.0"
 thiserror = "2.0.3"
+winit = "0.30.5"
 
