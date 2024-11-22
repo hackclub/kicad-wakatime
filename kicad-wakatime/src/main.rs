@@ -2,14 +2,14 @@ use kicad_wakatime::Ui;
 use std::thread::sleep;
 use std::time::Duration;
 
-use cocoa::appkit::NSApp;
-use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
+// use cocoa::appkit::NSApp;
+// use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
 use kicad_wakatime::{Plugin, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
 use active_win_pos_rs::get_active_window;
 use clap::Parser;
-use cocoa::appkit::NSApplication;
+// use cocoa::appkit::NSApplication;
 use env_logger::Env;
 // use fltk::{prelude::*, window::Window};
 use fltk::browser::*;
