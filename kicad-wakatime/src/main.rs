@@ -7,31 +7,11 @@ use std::time::Duration;
 use kicad_wakatime::{Plugin, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
-use active_win_pos_rs::get_active_window;
 use clap::Parser;
 // use cocoa::appkit::NSApplication;
 use env_logger::Env;
 // use fltk::{prelude::*, window::Window};
-use fltk::browser::*;
-use fltk::button::*;
-use fltk::dialog::*;
-use fltk::enums::*;
-use fltk::frame::*;
-use fltk::group::*;
-use fltk::group::experimental::*;
-use fltk::image::*;
-use fltk::input::*;
-use fltk::menu::*;
-use fltk::misc::*;
-use fltk::output::*;
-use fltk::{prelude::*, *};
-use fltk::table::*;
-use fltk::text::*;
-use fltk::tree::*;
-use fltk::valuator::*;
-use fltk::widget::*;
-use fltk::window::*;
-use log::info;
+use fltk::prelude::*;
 use log::debug;
 use sysinfo::System;
 
@@ -60,15 +40,6 @@ fn main() -> Result<(), anyhow::Error> {
   sys.refresh_all();
   sys.debug_processes();
 
-  // #[cfg(target_os = "macos")]
-  // unsafe {
-  //   let ns_app = NSApplication::sharedApplication(cocoa::base::nil);
-  //   ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
-  //   ns_app.finishLaunching();
-  //   ns_app.run();
-  //   println!("got here");
-  // }
-
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 
   let fltk_app = fltk::app::App::default();
@@ -90,32 +61,28 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.as_mut().unwrap().main_window.end();
   plugin.ui.as_mut().unwrap().main_window.show();
 
-  // dual_debug(&mut log_window, format!("it works!"));
-
-  // while fltk_app.wait() {
   fltk::app::add_idle3(move |_| {
     plugin.set_current_time(plugin.current_time());
-    let w = plugin.get_active_window();
-    let Ok(w) = w else { return; };
+    let Ok(w) = plugin.get_active_window() else { return; };
     let Some(ref k) = plugin.kicad else { return; };
     if w.title.contains("Schematic Editor") {
-      let schematic = k.get_open_schematic().expect("no schematics are open");
+      let Ok(schematic) = k.get_open_schematic() else { return; };
       // the KiCAD IPC API does not work properly with schematics as of November 2024
       // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
       // modification without save cannot be sent
       let schematic_ds = schematic.doc;
-      // plugin.dual_debug(format!("schematic_ds = {:?}", schematic_ds.clone()));
+      debug!("schematic_ds = {:?}", schematic_ds.clone());
       plugin.set_current_file_from_document_specifier(schematic_ds.clone());
     }
     else if w.title.contains("PCB Editor") {
       // for the PCB editor, we can instead use the Rust bindings proper
-      let board = k.get_open_board().expect("no boards are open");
+      let Ok(board) = k.get_open_board() else { return; };
       let board_ds = board.doc;
-      // plugin.dual_debug(format!("board_ds = {:?}", board_ds.clone()));
+      debug!("board_ds = {:?}", board_ds.clone());
       plugin.set_current_file_from_document_specifier(board_ds.clone());
       plugin.set_many_items();
     } else {
-      // plugin.dual_debug(format!("w.title = {}", w.title));
+      debug!("w.title = {}", w.title);
     }
     plugin.try_recv();
     plugin.first_iteration_finished = true;
@@ -124,7 +91,7 @@ fn main() -> Result<(), anyhow::Error> {
     }
   });
   
-  fltk_app.run();
+  fltk_app.run()?;
 
   Ok(())
 }
