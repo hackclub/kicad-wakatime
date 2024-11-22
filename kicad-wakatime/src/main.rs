@@ -10,42 +10,30 @@ use active_win_pos_rs::get_active_window;
 use clap::Parser;
 use cocoa::appkit::NSApplication;
 use env_logger::Env;
+// use fltk::{prelude::*, window::Window};
+use fltk::browser::*;
+use fltk::button::*;
+use fltk::dialog::*;
+use fltk::enums::*;
+use fltk::frame::*;
+use fltk::group::*;
+use fltk::group::experimental::*;
+use fltk::image::*;
+use fltk::input::*;
+use fltk::menu::*;
+use fltk::misc::*;
+use fltk::output::*;
+use fltk::{prelude::*, *};
+use fltk::table::*;
+use fltk::text::*;
+use fltk::tree::*;
+use fltk::valuator::*;
+use fltk::widget::*;
+use fltk::window::*;
 use log::debug;
 // use log::error;
 use log::info;
 use sysinfo::System;
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
-
-#[derive(Default)]
-struct App {
-  window: Option<Window>,
-}
-
-impl ApplicationHandler for App {
-  fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-    self.window = Some(event_loop.create_window(Window::default_attributes()).unwrap());
-  }
-
-  fn window_event(
-    &mut self,
-    event_loop: &ActiveEventLoop,
-    window_id: WindowId,
-    event: WindowEvent,
-  ) {
-    match event {
-      WindowEvent::CloseRequested => {
-        event_loop.exit();
-      },
-      WindowEvent::RedrawRequested => {
-        self.window.as_ref().unwrap().request_redraw();
-      },
-      _ => (),
-    }
-  }
-}
 
 /// WakaTime plugin for KiCAD nightly
 #[derive(Parser)]
@@ -57,6 +45,14 @@ pub struct Args {
   /// Sleep for 5 seconds after every iteration
   #[clap(long)]
   sleepy: bool,
+}
+
+pub struct Ui {
+  pub main_window: Window,
+  pub status_box: Output,
+  pub exit_button: Button,
+  pub log_window: Terminal,
+  pub last_heartbeat_box: Output,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -72,19 +68,14 @@ fn main() -> Result<(), anyhow::Error> {
   sys.refresh_all();
   sys.debug_processes();
 
-  #[cfg(target_os = "macos")]
-  unsafe {
-    let ns_app = NSApplication::sharedApplication(cocoa::base::nil);
-    ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
-    ns_app.finishLaunching();
-    ns_app.run();
-    println!("got here");
-  }
-
-  // let winit_event_loop = EventLoop::new().unwrap();
-  // winit_event_loop.set_control_flow(ControlFlow::Poll);
-  // let mut winit_app = App::default();
-  // winit_event_loop.run_app(&mut winit_app);
+  // #[cfg(target_os = "macos")]
+  // unsafe {
+  //   let ns_app = NSApplication::sharedApplication(cocoa::base::nil);
+  //   ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
+  //   ns_app.finishLaunching();
+  //   ns_app.run();
+  //   println!("got here");
+  // }
 
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 
@@ -92,46 +83,70 @@ fn main() -> Result<(), anyhow::Error> {
   info!("Initializing kicad-wakatime...");
   let mut plugin = Plugin::new(
     args.disable_heartbeats,
+    args.sleepy,
   );
+
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
-  // plugin.create_file_watcher()?;
-  // plugin.file_watcher = Some(watcher);
   plugin.check_cli_installed()?;
   plugin.get_api_key()?;
-  plugin.await_connect_to_kicad()?;
+  plugin.connect_to_kicad()?;
 
-  // main loop
-  loop {
+  let fltk_app = fltk::app::App::default();
+
+  let mut main_window = Window::new(389, 286, 382, 260, None);
+  main_window.set_label(r#"kicad-wakatime ^_^"#);
+  main_window.set_type(WindowType::Double);
+  main_window.make_resizable(true);
+  let mut status_box = Output::new(60, 16, 92, 22, None);
+  status_box.set_label(r#"status:"#);
+  status_box.set_frame(FrameType::NoBox);
+  let mut exit_button = Button::new(303, 15, 64, 22, None);
+  exit_button.set_label(r#"exit"#);
+  exit_button.set_callback(|_| {});
+  let mut log_window = Terminal::new(15, 85, 352, 159, None);
+  log_window.set_label(r#"log:"#);
+  log_window.set_align(unsafe {std::mem::transmute(5)});
+  main_window.resizable(&log_window);
+  let mut last_heartbeat_box = Output::new(108, 40, 92, 22, None);
+  last_heartbeat_box.set_label(r#"last heartbeat:"#);
+  last_heartbeat_box.set_frame(FrameType::NoBox);
+  main_window.end();
+  main_window.show();
+
+  // while fltk_app.wait() {
+  fltk::app::add_idle3(move |_| {
     plugin.set_current_time(plugin.current_time());
     let w = plugin.get_active_window();
-    debug!("w.title = {}", w.title);
+    let Ok(w) = w else { return; };
     let k = plugin.kicad.as_ref().unwrap();
     if w.title.contains("Schematic Editor") {
-      let schematic = k.get_open_schematic()?;
+      let schematic = k.get_open_schematic().expect("no schematics are open");
       // the KiCAD IPC API does not work properly with schematics as of November 2024
       // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
       // modification without save cannot be sent
       let schematic_ds = schematic.doc;
       debug!("schematic_ds = {:?}", schematic_ds.clone());
-      plugin.set_current_file_from_document_specifier(schematic_ds.clone())?;
+      plugin.set_current_file_from_document_specifier(schematic_ds.clone());
     }
     else if w.title.contains("PCB Editor") {
       // for the PCB editor, we can instead use the Rust bindings proper
-      let board = k.get_open_board()?;
+      let board = k.get_open_board().expect("no boards are open");
       let board_ds = board.doc;
       debug!("board_ds = {:?}", board_ds.clone());
-      plugin.set_current_file_from_document_specifier(board_ds.clone())?;
-      plugin.set_many_items()?;
+      plugin.set_current_file_from_document_specifier(board_ds.clone());
+      plugin.set_many_items();
     } else {
+      debug!("w.title = {}", w.title);
     }
-    plugin.try_recv()?;
+    plugin.try_recv();
     plugin.first_iteration_finished = true;
-    if args.sleepy {
+    if plugin.sleepy {
       sleep(Duration::from_secs(5));
     }
-  }
+  });
+  
+  fltk_app.run();
 
-  // TODO: this is unreachable
   Ok(())
 }

@@ -28,6 +28,7 @@ const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
+  pub sleepy: bool,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -53,7 +54,8 @@ pub struct Plugin {
 
 impl<'a> Plugin {
   pub fn new(
-    disable_heartbeats: bool
+    disable_heartbeats: bool,
+    sleepy: bool,
   ) -> Self {
     if disable_heartbeats {
       warn!("Heartbeats are disabled (using --disable-heartbeats)");
@@ -61,12 +63,13 @@ impl<'a> Plugin {
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
+      sleepy,
       ..Default::default()
     }
   }
-  pub fn get_active_window(&self) -> ActiveWindow {
-    let active_window = get_active_window().expect("Could not get active window!");
-    if active_window.title == "" {
+  pub fn get_active_window(&self) -> Result<ActiveWindow, ()> {
+    let active_window = get_active_window();
+    if active_window.clone().is_ok_and(|w| w.title == "") {
       error!("Could not get title of active window!");
       error!("If you are on macOS, please give your terminal Screen Recording permission");
       error!("(System Settings -> Privacy and Security -> Screen Recording)");
@@ -98,40 +101,21 @@ impl<'a> Plugin {
     // debug!("api_key = {api_key}");
     Ok(api_key.to_string())
   }
-  pub fn await_connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
-    let mut times = 0;
-    let mut k: Option<KiCad>;
-    loop {
-      // if times == 6 {
-      //   error!("Could not connect to KiCAD! (30s)");
-      //   error!("Ensure KiCAD is open and the KiCAD API is enabled (Preferences -> Plugins -> Enable KiCAD API)");
-      //   return Err(PluginError::CouldNotConnect.into())
-      // }
-      info!("Waiting for KiCAD... ({times})");
-      k = KiCad::new(KiCadConnectionConfig {
-        client_name: String::from("kicad-wakatime"),
-        ..Default::default()
-      }).ok();
-      if k.is_some() {
-        break;
-      }
-      sleep(Duration::from_secs(5));
-      times += 1;
-    }
-    self.kicad = k;
-    info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
-    // if the loop was immediately able to find KiCAD,
-    // that means KiCAD was already open when the plugin started.
-    // KiCAD needs to be opened after kicad-wakatime; otherwise, active-win-pos-rs
-    // will focus on the shell forever, instead of the actual focused windows
-    // TODO: get the plugin to spawn KiCAD instead?
-    if times == 0 {
-      error!("KiCAD was opened before kicad-wakatime!");
-      error!("Please close KiCAD, restart kicad-wakatime, then open KiCAD last");
+  pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
+    let k = KiCad::new(KiCadConnectionConfig {
+      client_name: String::from("kicad-wakatime"),
+      ..Default::default()
+    }).ok();
+    if k.is_some() {
+      self.kicad = k;
+      info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
+      debug!("self.kicad = {:?}", self.kicad);
+      Ok(())
+    } else {
+      error!("Could not connect to KiCAD!");
+      error!("Please open KiCAD before opening kicad-wakatime!");
       process::exit(1);
     }
-    debug!("self.kicad = {:?}", self.kicad);
-    Ok(())
   }
   // TODO: plugin only works in PCB editor - get open documents, not open board
   pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
