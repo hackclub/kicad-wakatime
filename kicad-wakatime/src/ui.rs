@@ -77,6 +77,7 @@ impl Ui {
     };
     // settings window
     let mut settings_window = Window::new(516, 350, 456, 158, None);
+    settings_window.make_modal(true);
     settings_window.set_label(r#"kicad-wakatime settings ^w^"#);
     settings_window.set_type(WindowType::Double);
     let mut api_key = Input::new(15, 26, 420, 24, None);
