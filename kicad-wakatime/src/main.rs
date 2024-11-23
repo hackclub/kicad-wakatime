@@ -62,13 +62,14 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.as_mut().unwrap().main_window_ui.main_window.show();
 
   while fltk_app.wait() {
+    let ui = plugin.ui.as_mut().unwrap();
     // if let Some(Message::OpenSettingsWindow) = plugin.ui.as_mut().unwrap().receiver.recv() {
-    match plugin.ui.as_mut().unwrap().receiver.recv() {
+    match ui.receiver.recv() {
       Some(Message::OpenSettingsWindow) => {
-        plugin.ui.as_mut().unwrap().settings_window_ui.settings_window.show();
+        ui.settings_window_ui.settings_window.show();
       },
       Some(Message::CloseSettingsWindow) => {
-        plugin.ui.as_mut().unwrap().settings_window_ui.settings_window.hide();
+        ui.settings_window_ui.settings_window.hide();
       },
       None => {},
     }
