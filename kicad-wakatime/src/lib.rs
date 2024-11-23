@@ -8,13 +8,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
-use fltk::group::experimental::Terminal;
 use ini::Ini;
-use fltk::button::*;
-use fltk::enums::*;
-use fltk::output::*;
-use fltk::prelude::*;
-use fltk::window::*;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
@@ -26,47 +20,12 @@ use log::warn;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use thiserror::Error;
 
+pub mod ui;
 pub mod traits;
 
+use ui::Ui;
+
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-#[derive(Clone, Debug)]
-pub struct Ui {
-  pub main_window: Window,
-  pub status_box: Output,
-  pub exit_button: Button,
-  pub log_window: Terminal,
-  pub last_heartbeat_box: Output,
-}
-
-impl Ui {
-  pub fn make_window() -> Self {
-    let mut main_window = Window::new(389, 286, 382, 260, None);
-    main_window.set_label(r#"kicad-wakatime ^_^"#);
-    main_window.set_type(WindowType::Double);
-    main_window.make_resizable(true);
-    let mut status_box = Output::new(60, 16, 92, 22, None);
-    status_box.set_label(r#"status:"#);
-    status_box.set_frame(FrameType::NoBox);
-    let mut exit_button = Button::new(303, 15, 64, 22, None);
-    exit_button.set_label(r#"exit"#);
-    exit_button.set_callback(|_| {});
-    let mut log_window = Terminal::new(15, 85, 352, 159, None);
-    log_window.set_label(r#"log:"#);
-    log_window.set_align(unsafe {std::mem::transmute(5)});
-    main_window.resizable(&log_window);
-    let mut last_heartbeat_box = Output::new(108, 40, 92, 22, None);
-    last_heartbeat_box.set_label(r#"last heartbeat:"#);
-    last_heartbeat_box.set_frame(FrameType::NoBox);
-    Self {
-      main_window,
-      status_box,
-      exit_button,
-      log_window,
-      last_heartbeat_box
-    }
-  }
-}
 
 #[derive(Default)]
 pub struct Plugin {
@@ -434,17 +393,17 @@ impl<'a> Plugin {
   pub fn dual_info(&mut self, s: String) {
     let Some(ref mut ui) = self.ui else { todo!(); };
     info!("{}", s);
-    ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
+    ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_warn(&mut self, s: String) {
     let Some(ref mut ui) = self.ui else { todo!(); };
     warn!("{}", s);
-    ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
+    ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_error(&mut self, s: String) {
     let Some(ref mut ui) = self.ui else { todo!(); };
     error!("{}", s);
-    ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
+    ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
 }
 

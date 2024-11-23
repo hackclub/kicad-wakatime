@@ -1,4 +1,4 @@
-use kicad_wakatime::Ui;
+use kicad_wakatime::ui::{Message, Ui};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -49,7 +49,7 @@ fn main() -> Result<(), anyhow::Error> {
     args.disable_heartbeats,
     args.sleepy,
   );
-  plugin.ui = Some(Ui::make_window());
+  plugin.ui = Some(Ui::new());
   plugin.dual_info(String::from("Initializing kicad-wakatime..."));
 
   plugin.tx = Some(tx);
@@ -58,8 +58,21 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.get_api_key()?;
   plugin.connect_to_kicad()?;
 
-  plugin.ui.as_mut().unwrap().main_window.end();
-  plugin.ui.as_mut().unwrap().main_window.show();
+  plugin.ui.as_mut().unwrap().main_window_ui.main_window.end();
+  plugin.ui.as_mut().unwrap().main_window_ui.main_window.show();
+
+  while fltk_app.wait() {
+    // if let Some(Message::OpenSettingsWindow) = plugin.ui.as_mut().unwrap().receiver.recv() {
+    match plugin.ui.as_mut().unwrap().receiver.recv() {
+      Some(Message::OpenSettingsWindow) => {
+        plugin.ui.as_mut().unwrap().settings_window_ui.settings_window.show();
+      },
+      Some(Message::CloseSettingsWindow) => {
+        plugin.ui.as_mut().unwrap().settings_window_ui.settings_window.hide();
+      },
+      None => {},
+    }
+  }
 
   fltk::app::add_idle3(move |_| {
     plugin.set_current_time(plugin.current_time());
@@ -91,7 +104,7 @@ fn main() -> Result<(), anyhow::Error> {
     }
   });
   
-  fltk_app.run()?;
+  // fltk_app.run()?;
 
   Ok(())
 }
