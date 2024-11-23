@@ -13,6 +13,7 @@ use fltk::group::experimental::Terminal;
 pub enum Message {
   OpenSettingsWindow,
   CloseSettingsWindow,
+  UpdateSettings,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +92,7 @@ impl Ui {
     let mut ok_button = ReturnButton::new(349, 115, 86, 22, None);
     ok_button.set_label(r#"okay!"#);
     ok_button.set_callback(move |_| {
+      sender.send(Message::UpdateSettings);
       sender.send(Message::CloseSettingsWindow);
     });
     settings_window.end();

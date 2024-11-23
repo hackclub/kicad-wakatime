@@ -1,10 +1,9 @@
-use kicad_wakatime::ui::{Message, Ui};
 use std::thread::sleep;
 use std::time::Duration;
 
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
-use kicad_wakatime::{Plugin, traits::DebugProcesses};
+use kicad_wakatime::{Plugin, ui::Message, traits::DebugProcesses};
 // use std::fs;
 // use std::process;
 use clap::Parser;
@@ -49,28 +48,34 @@ fn main() -> Result<(), anyhow::Error> {
     args.disable_heartbeats,
     args.sleepy,
   );
-  plugin.ui = Some(Ui::new());
   plugin.dual_info(String::from("Initializing kicad-wakatime..."));
 
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
   plugin.check_cli_installed()?;
-  plugin.get_api_key()?;
+  plugin.load_config();
   plugin.connect_to_kicad()?;
 
-  plugin.ui.as_mut().unwrap().main_window_ui.main_window.end();
-  plugin.ui.as_mut().unwrap().main_window_ui.main_window.show();
+  plugin.ui.main_window_ui.main_window.end();
+  plugin.ui.main_window_ui.main_window.show();
+  // settings population
+  let api_key = plugin.get_api_key();
+  plugin.ui.settings_window_ui.api_key.set_value(api_key.as_str());
 
   while fltk_app.wait() {
-    let ui = plugin.ui.as_mut().unwrap();
-    // if let Some(Message::OpenSettingsWindow) = plugin.ui.as_mut().unwrap().receiver.recv() {
-    match ui.receiver.recv() {
+    match plugin.ui.receiver.recv() {
       Some(Message::OpenSettingsWindow) => {
-        ui.settings_window_ui.settings_window.show();
+        plugin.ui.settings_window_ui.settings_window.show();
       },
       Some(Message::CloseSettingsWindow) => {
-        ui.settings_window_ui.settings_window.hide();
+        plugin.ui.settings_window_ui.settings_window.hide();
+        plugin.store_config();
       },
+      Some(Message::UpdateSettings) => {
+        plugin.set_api_key(plugin.ui.settings_window_ui.api_key.value());
+        plugin.set_api_url(plugin.ui.settings_window_ui.server_url.value().unwrap());
+        plugin.store_config();
+      }
       None => {},
     }
   }

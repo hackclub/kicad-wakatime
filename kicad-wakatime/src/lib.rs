@@ -27,12 +27,12 @@ use ui::Ui;
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-#[derive(Default)]
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
   pub sleepy: bool,
-  pub ui: Option<Ui>,
+  pub config: Ini,
+  pub ui: Ui,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -65,7 +65,21 @@ impl<'a> Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
       sleepy,
-      ..Default::default()
+      config: Ini::default(),
+      ui: Ui::new(),
+      tx: None,
+      rx: None,
+      kicad: None,
+      filename: String::default(),
+      full_path: PathBuf::default(),
+      full_paths: HashMap::default(),
+      warned_filenames: vec![],
+      file_watcher: None,
+      items: HashMap::default(),
+      time: Duration::default(),
+      last_sent_time: Duration::default(),
+      last_sent_file: String::default(),
+      first_iteration_finished: false,
     }
   }
   pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
@@ -92,15 +106,34 @@ impl<'a> Plugin {
     }
     Ok(())
   }
-  pub fn get_api_key(&mut self) -> Result<String, anyhow::Error> {
-    let cfg_path = self.cfg_path();
-    // TODO: remove expects
-    // TODO: prompt for and store API key if not found
-    let cfg = Ini::load_from_file(cfg_path).expect("Could not get ~/.wakatime.cfg!");
-    let cfg_settings = cfg.section(Some("settings")).expect("Could not get settings from ~/.wakatime.cfg!");
-    let api_key = cfg_settings.get("api_key").expect("Could not get API key!");
-    // debug!("api_key = {api_key}");
-    Ok(api_key.to_string())
+  pub fn load_config(&mut self) {
+    if !fs::exists(self.cfg_path()).unwrap() {
+      Ini::new().write_to_file(self.cfg_path());
+    }
+    self.config = Ini::load_from_file(self.cfg_path()).unwrap();
+  }
+  pub fn store_config(&self) {
+    Ini::write_to_file(&self.config, self.cfg_path());
+  }
+  pub fn set_api_key(&mut self, api_key: String) {
+    self.config.with_section(Some("settings"))
+      .set("api_key", api_key);
+  }
+  pub fn get_api_key(&mut self) -> String {
+    match self.config.with_section(Some("settings")).get("api_key") {
+      Some(api_key) => api_key.to_string(),
+      None => String::new(),
+    }
+  }
+  pub fn set_api_url(&mut self, api_url: String) {
+    self.config.with_section(Some("settings"))
+      .set("api_url", api_url);
+  }
+  pub fn get_api_url(&mut self) -> String {
+    match self.config.with_section(Some("settings")).get("api_url") {
+      Some(api_url) => api_url.to_string(),
+      None => String::new(),
+    }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
     let k = KiCad::new(KiCadConnectionConfig {
@@ -343,7 +376,8 @@ impl<'a> Plugin {
     let plugin_version = self.version;
     let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
     let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/{plugin_version}\"");
-    let api_key = self.get_api_key()?;
+    let api_key = self.get_api_key();
+    // TODO: api key validity check
     let quoted_api_key = format!("\"{api_key}\"");
     // TODO: metrics?
     // TODO: api_url?
@@ -391,19 +425,16 @@ impl<'a> Plugin {
     home_dir.join(".wakatime").join(cli_name)
   }
   pub fn dual_info(&mut self, s: String) {
-    let Some(ref mut ui) = self.ui else { todo!(); };
     info!("{}", s);
-    ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
+    self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_warn(&mut self, s: String) {
-    let Some(ref mut ui) = self.ui else { todo!(); };
     warn!("{}", s);
-    ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
+    self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_error(&mut self, s: String) {
-    let Some(ref mut ui) = self.ui else { todo!(); };
     error!("{}", s);
-    ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
+    self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
 }
 
