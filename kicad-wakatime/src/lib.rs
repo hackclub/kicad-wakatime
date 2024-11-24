@@ -99,7 +99,10 @@ impl<'a> Plugin {
   }
   pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
     let active_window = get_active_window();
-    if active_window.clone().is_ok_and(|w| w.title == "") {
+    // as far as i can tell, active_win_pos_rs will focus on kicad-wakatime
+    // when it starts, and that window should by all means have a title.
+    // if the field is empty, kicad-wakatime is missing permissions
+    if active_window.clone().is_ok_and(|w| (w.app_name == "kicad-wakatime" || w.app_name == "FLTK") && w.title == "") {
       self.dual_error(String::from("Could not get title of active window!"));
       self.dual_error(String::from("If you are on macOS, please give kicad-wakatime Screen Recording permission"));
       self.dual_error(String::from("(System Settings -> Privacy and Security -> Screen Recording)"));
