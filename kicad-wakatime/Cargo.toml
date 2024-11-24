@@ -25,5 +25,6 @@ serde = "1.0.215"
 serde_json = "1.0.133"
 sysinfo = "0.32.0"
 thiserror = "2.0.3"
+zip-extract = "0.2.1"
 # winit = "0.30.5"
 

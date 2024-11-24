@@ -1,6 +1,7 @@
 use core::str;
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 // use std::rc::Rc;
@@ -102,20 +103,25 @@ impl<'a> Plugin {
       self.dual_info(String::from("File exists!"));
       // TODO: update to latest version if needed
     } else {
-      // TODO: download latest version
-      // self.dual_error(String::from("File does not exist!"));
-      // self.dual_error(String::from("Ensure this file exists before proceeding"));
-      // return Err(PluginError::CliNotFound.into())
+      info!("File does not exist!");
       self.get_latest_release();
     }
     Ok(())
   }
   pub fn get_latest_release(&mut self) {
+    info!("Downloading latest WakaTime CLI...");
     let client = reqwest::blocking::Client::new();
+    // need to insert some kind of user agent to avoid getting 403 forbidden
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("user-agent", "kicad-wakatime/1.0".parse().unwrap());
+    // create .wakatime folder if it does not exist
+    // we will be downloading the .zip into there
+    if let Ok(false) = fs::exists(self.wakatime_folder_path()) {
+      fs::create_dir(self.wakatime_folder_path());
+    }
+    // get download URL
     let res = client.get("https://api.github.com/repos/wakatime/wakatime-cli/releases/latest")
-      .headers(headers)
+      .headers(headers.clone())
       .send()
       .expect("Could not make request!");
     let json = res.json::<serde_json::Value>().unwrap();
@@ -123,19 +129,37 @@ impl<'a> Plugin {
       .as_array()
       .unwrap()
       .into_iter()
-      .find(|v| v["name"].as_str().unwrap().to_owned() == self.cli_zip(env_consts()))
+      .find(|v| v["name"].as_str().unwrap().to_owned() == self.cli_zip_name(env_consts()))
       .unwrap();
-    let zip_url = asset["browser_download_url"].clone().as_str().unwrap().to_owned();
-    debug!("{:?}", zip_url);
+    let download_url = asset["browser_download_url"].as_str().unwrap().to_owned();
+    // download .zip file
+    let res = client.get(download_url)
+      .headers(headers)
+      .send()
+      .expect("Could not make request!");
+    let zip_bytes = res.bytes().expect("Could not parse bytes!");
+    debug!("{:?}", self.cli_zip_path(env_consts()));
+    let mut zip_file = fs::File::create(self.cli_zip_path(env_consts())).unwrap();
+    zip_file.write_all(&zip_bytes);
+    let zip_vec_u8: Vec<u8> = fs::read(self.cli_zip_path(env_consts())).unwrap();
+    // extract .zip file
+    zip_extract::extract(
+      Cursor::new(zip_vec_u8),
+      &self.wakatime_folder_path(),
+      true
+    );
+    // remove zip file
+    fs::remove_file(self.cli_zip_path(env_consts()));
   }
   pub fn load_config(&mut self) {
-    if !fs::exists(self.cfg_path()).unwrap() {
-      Ini::new().write_to_file(self.cfg_path());
+    let wakatime_cfg_path = self.wakatime_cfg_path();
+    if !fs::exists(&wakatime_cfg_path).unwrap() {
+      Ini::new().write_to_file(&wakatime_cfg_path);
     }
-    self.config = Ini::load_from_file(self.cfg_path()).unwrap();
+    self.config = Ini::load_from_file(&wakatime_cfg_path).unwrap();
   }
   pub fn store_config(&self) {
-    Ini::write_to_file(&self.config, self.cfg_path());
+    Ini::write_to_file(&self.config, self.wakatime_cfg_path());
   }
   pub fn set_api_key(&mut self, api_key: String) {
     self.config.with_section(Some("settings"))
@@ -433,10 +457,17 @@ impl<'a> Plugin {
     debug!("last_sent_file = {:?}", self.last_sent_file);
     Ok(())
   }
-  pub fn cfg_path(&self) -> PathBuf {
+  /// Return the path to the .wakatime.cfg file.
+  pub fn wakatime_cfg_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
     home_dir.join(".wakatime.cfg")
   }
+  /// Return the path to the .wakatime folder.
+  pub fn wakatime_folder_path(&self) -> PathBuf {
+    let home_dir = home::home_dir().expect("Unable to get your home directory!");
+    home_dir.join(".wakatime")
+  }
+  /// Return the file stem of the WakaTime CLI for the current OS and architecture.
   pub fn cli_name(&self, consts: (&'static str, &'static str)) -> String {
     let (os, arch) = consts;
     match os {
@@ -444,11 +475,13 @@ impl<'a> Plugin {
       _o => format!("wakatime-cli-{os}-{arch}"),
     }
   }
-  pub fn cli_zip(&self, consts: (&'static str, &'static str)) -> String {
+  /// Return the file name of the WakaTime CLI .zip file for the current OS and architecture. 
+  pub fn cli_zip_name(&self, consts: (&'static str, &'static str)) -> String {
     let (os, arch) = consts;
     format!("{}.zip", self.cli_name(consts))
   }
-  pub fn cli_exe(&self, consts: (&'static str, &'static str)) -> String {
+  /// Return the file name of the WakaTime CLI for the current OS and architecture.
+  pub fn cli_exe_name(&self, consts: (&'static str, &'static str)) -> String {
     let (os, arch) = consts;
     let cli_name = self.cli_name(consts);
     match os {
@@ -456,10 +489,16 @@ impl<'a> Plugin {
       _o => cli_name,
     }
   }
+  /// Return the path to the WakaTime CLI for the current OS and architecture.
   pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
-    let home_dir = home::home_dir().expect("Unable to get your home directory!");
-    let cli_exe = self.cli_exe(consts);
-    home_dir.join(".wakatime").join(cli_exe)
+    let wakatime_folder_path = self.wakatime_folder_path();
+    let cli_exe_name = self.cli_exe_name(consts);
+    wakatime_folder_path.join(cli_exe_name)
+  }
+  /// Return the path to the downloaded WakaTime CLI .zip file for the current OS and architecture.
+  /// The file is downloaded into the .wakatime folder.
+  pub fn cli_zip_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
+    self.wakatime_folder_path().join(self.cli_zip_name(consts))
   }
   pub fn dual_info(&mut self, s: String) {
     info!("{}", s);
