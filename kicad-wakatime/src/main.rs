@@ -96,7 +96,6 @@ fn main() -> Result<(), anyhow::Error> {
       }
       None => {},
     }
-    plugin.first_iteration_finished = true;
   });
   
   fltk_app.run()?;

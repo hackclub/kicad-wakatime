@@ -48,7 +48,6 @@ pub struct Plugin {
   pub last_sent_time: Duration,
   // the last file that was sent
   pub last_sent_file: String,
-  pub first_iteration_finished: bool,
 }
 
 impl<'a> Plugin {
@@ -72,7 +71,6 @@ impl<'a> Plugin {
       time: Duration::default(),
       last_sent_time: Duration::default(),
       last_sent_file: String::default(),
-      first_iteration_finished: false,
     }
   }
   pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
@@ -362,13 +360,6 @@ impl<'a> Plugin {
     is_file_saved: bool
   ) -> Result<(), anyhow::Error> {
     debug!("Determining whether to send heartbeat...");
-    // on the first iteration of the main loop, multiple values used to determine
-    // whether a heartbeat should be sent are updated from their defaults, so any
-    // heartbeats that would be sent are false positives that should be ignored
-    if !self.first_iteration_finished {
-      debug!("Not sending heartbeat (first iteration)");
-      return Ok(());
-    }
     if self.last_sent_time == Duration::ZERO {
       debug!("No heartbeats have been sent since the plugin opened");
     } else {
