@@ -19,7 +19,10 @@ kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
 mouse_position = "0.1.4"
 notify = "7.0.0"
+reqwest = { version = "0.12.9", features = ["blocking", "json"] }
 rust-ini = "0.21.1"
+serde = "1.0.215"
+serde_json = "1.0.133"
 sysinfo = "0.32.0"
 thiserror = "2.0.3"
 # winit = "0.30.5"

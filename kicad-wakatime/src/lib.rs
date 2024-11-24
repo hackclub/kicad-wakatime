@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 // use std::rc::Rc;
-// use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
@@ -18,6 +18,9 @@ use log::error;
 use log::warn;
 // use mouse_position::mouse_position::Mouse;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 use thiserror::Error;
 
 pub mod ui;
@@ -100,11 +103,30 @@ impl<'a> Plugin {
       // TODO: update to latest version if needed
     } else {
       // TODO: download latest version
-      self.dual_error(String::from("File does not exist!"));
-      self.dual_error(String::from("Ensure this file exists before proceeding"));
-      return Err(PluginError::CliNotFound.into())
+      // self.dual_error(String::from("File does not exist!"));
+      // self.dual_error(String::from("Ensure this file exists before proceeding"));
+      // return Err(PluginError::CliNotFound.into())
+      self.get_latest_release();
     }
     Ok(())
+  }
+  pub fn get_latest_release(&mut self) {
+    let client = reqwest::blocking::Client::new();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("user-agent", "kicad-wakatime/1.0".parse().unwrap());
+    let res = client.get("https://api.github.com/repos/wakatime/wakatime-cli/releases/latest")
+      .headers(headers)
+      .send()
+      .expect("Could not make request!");
+    let json = res.json::<serde_json::Value>().unwrap();
+    let mut asset = json["assets"]
+      .as_array()
+      .unwrap()
+      .into_iter()
+      .find(|v| v["name"].as_str().unwrap().to_owned() == self.cli_zip(env_consts()))
+      .unwrap();
+    let zip_url = asset["browser_download_url"].clone().as_str().unwrap().to_owned();
+    debug!("{:?}", zip_url);
   }
   pub fn load_config(&mut self) {
     if !fs::exists(self.cfg_path()).unwrap() {
@@ -415,14 +437,29 @@ impl<'a> Plugin {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
     home_dir.join(".wakatime.cfg")
   }
-  pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
+  pub fn cli_name(&self, consts: (&'static str, &'static str)) -> String {
     let (os, arch) = consts;
-    let home_dir = home::home_dir().expect("Unable to get your home directory!");
-    let cli_name = match os {
-      "windows" => format!("wakatime-cli-windows-{arch}.exe"),
+    match os {
+      "windows" => format!("wakatime-cli-windows-{arch}"),
       _o => format!("wakatime-cli-{os}-{arch}"),
-    };
-    home_dir.join(".wakatime").join(cli_name)
+    }
+  }
+  pub fn cli_zip(&self, consts: (&'static str, &'static str)) -> String {
+    let (os, arch) = consts;
+    format!("{}.zip", self.cli_name(consts))
+  }
+  pub fn cli_exe(&self, consts: (&'static str, &'static str)) -> String {
+    let (os, arch) = consts;
+    let cli_name = self.cli_name(consts);
+    match os {
+      "windows" => format!("{cli_name}.exe"),
+      _o => cli_name,
+    }
+  }
+  pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
+    let home_dir = home::home_dir().expect("Unable to get your home directory!");
+    let cli_exe = self.cli_exe(consts);
+    home_dir.join(".wakatime").join(cli_exe)
   }
   pub fn dual_info(&mut self, s: String) {
     info!("{}", s);
