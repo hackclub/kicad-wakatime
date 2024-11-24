@@ -2,14 +2,11 @@ use std::thread::sleep;
 use std::time::Duration;
 
 // use cocoa::appkit::NSApp;
+// use cocoa::appkit::NSApplication;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
 use kicad_wakatime::{Plugin, ui::Message, traits::DebugProcesses};
-// use std::fs;
-// use std::process;
 use clap::Parser;
-// use cocoa::appkit::NSApplication;
 use env_logger::Env;
-// use fltk::{prelude::*, window::Window};
 use fltk::prelude::*;
 use log::debug;
 use sysinfo::System;

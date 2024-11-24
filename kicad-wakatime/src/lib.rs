@@ -4,8 +4,6 @@ use std::fs;
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
-// use std::rc::Rc;
-use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
@@ -17,12 +15,7 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
-// use mouse_position::mouse_position::Mouse;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
-use serde::Deserialize;
-use serde::de::DeserializeOwned;
-use serde_json::Value;
-use thiserror::Error;
 
 pub mod ui;
 pub mod traits;
@@ -51,7 +44,6 @@ pub struct Plugin {
   pub warned_filenames: Vec<String>,
   pub file_watcher: Option<RecommendedWatcher>,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
-  // pub mouse_position: Mouse,
   pub time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
@@ -197,19 +189,11 @@ impl<'a> Plugin {
     }
     Ok(())
   }
-  // TODO: plugin only works in PCB editor - get open documents, not open board
   pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
-  // pub fn await_get_open_board(&mut self) -> Result<(), anyhow::Error> {
     let mut times = 0;
     let k = self.kicad.as_ref().unwrap();
     let mut board: Option<Board>;
     loop {
-      // if times == 6 {
-      //   error!("Could not find open board! (30s)");
-      //   error!("Ensure that a board is open in the Schematic Editor or PCB Editor");
-      //   return Err(PluginError::NoOpenBoard.into())
-      // }
-      // debug!("Waiting for open board... ({times})");
       board = k.get_open_board().ok();
       if board.is_some() {
         break;
@@ -231,7 +215,6 @@ impl<'a> Plugin {
     let Some(Identifier::BoardFilename(ref filename)) = specifier.identifier else { unreachable!(); };
     filename.to_string()
   }
-  // pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) -> Result<(), anyhow::Error> {
   pub fn set_current_file_from_document_specifier(
     &mut self,
     specifier: DocumentSpecifier,
@@ -240,8 +223,6 @@ impl<'a> Plugin {
     // filename
     // TODO: other variants
     let filename = self.get_filename_from_document_specifier(&specifier);
-    // info!("filename = {}", filename.clone());
-    // info!("Current file updated to {}", filename.clone());
     // full path
     let project = specifier.project.0;
     let full_path = match project {
@@ -275,7 +256,6 @@ impl<'a> Plugin {
         self.get_full_path(filename.clone()).unwrap().to_path_buf()
       }
     };
-    // debug!("board_filename = {board_filename}");
     if self.filename != filename {
       self.dual_info(String::from("Focused file changed!"));
       // since the focused file changed, it might be time to send a heartbeat.
@@ -303,8 +283,6 @@ impl<'a> Plugin {
     Ok(())
   }
   pub fn watch_file(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
-    // let path = PathBuf::from("/Users/lux/file.txt");
-    // info!("Watching {:?} for changes...", path);
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
     self.dual_info(format!("Watcher set up to watch {:?} for changes", path));
@@ -366,7 +344,6 @@ impl<'a> Plugin {
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
     items_new.insert(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
     items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
-    // if self.items.iter().count() > 0 && self.items != items_new {
     if self.items != items_new {
       debug!("Board items changed!");
       self.items = items_new;
@@ -378,7 +355,6 @@ impl<'a> Plugin {
     } else {
       debug!("Board items did not change!");
     }
-    // set
     Ok(())
   }
   /// Send a heartbeat if conditions are met.
@@ -431,7 +407,6 @@ impl<'a> Plugin {
     // create process
     let cli_path = self.cli_path(env_consts());
     let mut cli = std::process::Command::new(cli_path);
-    // cli.args(cli_args.split(' ').collect::<Vec<&str>>());
     cli.args(&["--entity", &quoted_full_path]);
     cli.args(&["--plugin", &quoted_user_agent]);
     cli.args(&["--key", &quoted_api_key]);
@@ -439,7 +414,6 @@ impl<'a> Plugin {
       cli.arg("--write");
     }
     self.dual_info(String::from("Executing WakaTime CLI..."));
-    // cli.spawn().expect("Could not spawn WakaTime CLI!");
     let cli_output = cli.output()
       .expect("Could not execute WakaTime CLI!");
     let cli_status = cli_output.status;
@@ -512,16 +486,6 @@ impl<'a> Plugin {
     error!("{}", s);
     self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
-}
-
-#[derive(Debug, Error)]
-pub enum PluginError {
-  #[error("Could not find WakaTime CLI!")]
-  CliNotFound,
-  // #[error("Could not connect to KiCAD!")]
-  // CouldNotConnect,
-  // #[error("Could not find open board!")]
-  // NoOpenBoard,
 }
 
 /// Return the current OS and ARCH.
