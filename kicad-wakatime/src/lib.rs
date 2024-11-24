@@ -4,12 +4,11 @@ use std::fs;
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
-use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
 use fltk::prelude::*;
 use ini::Ini;
-use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
+use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
@@ -74,10 +73,9 @@ impl<'a> Plugin {
       last_sent_file: String::default(),
     }
   }
-  pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
+  pub fn main_loop(&mut self, k: &KiCad) -> Result<(), anyhow::Error> {
     self.set_current_time(self.current_time());
     let Ok(w) = self.get_active_window() else { return Ok(()); };
-    let Some(ref k) = self.kicad else { return Ok(()); };
     if w.title.contains("Schematic Editor") {
       let schematic = k.get_open_schematic()?;
       // the KiCAD IPC API does not work properly with schematics as of November 2024
@@ -93,7 +91,7 @@ impl<'a> Plugin {
       let board_ds = board.doc;
       debug!("board_ds = {:?}", board_ds.clone());
       self.set_current_file_from_document_specifier(board_ds.clone())?;
-      self.set_many_items()?;
+      self.set_many_items(k)?;
     }
     Ok(())
   }
@@ -138,7 +136,7 @@ impl<'a> Plugin {
       .send()
       .expect("Could not make request!");
     let json = res.json::<serde_json::Value>().unwrap();
-    let mut asset = json["assets"]
+    let asset = json["assets"]
       .as_array()
       .unwrap()
       .into_iter()
@@ -194,35 +192,22 @@ impl<'a> Plugin {
       None => String::new(),
     }
   }
-  pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
+  pub fn connect_to_kicad(&mut self) -> Result<KiCad, anyhow::Error> {
     let k = KiCad::new(KiCadConnectionConfig {
       client_name: String::from("kicad-wakatime"),
       ..Default::default()
-    }).ok();
-    if k.is_some() {
-      self.kicad = k;
-      self.dual_info(format!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap()));
-      debug!("self.kicad = {:?}", self.kicad);
-    } else {
-      self.dual_error(String::from("Could not connect to KiCAD!"));
-      self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
-      // process::exit(1);
+    });
+    match k {
+      Ok(k) => {
+        self.dual_info(format!("Connected to KiCAD! (v{})", k.get_version().unwrap()));
+        Ok(k)
+      },
+      Err(e) => {
+        self.dual_error(String::from("Could not connect to KiCAD!"));
+        self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
+        Err(e.into())
+      },
     }
-    Ok(())
-  }
-  pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
-    let k = self.kicad.as_ref().unwrap();
-    let mut board: Option<Board>;
-    loop {
-      board = k.get_open_board().ok();
-      if board.is_some() {
-        break;
-      }
-      sleep(Duration::from_secs(5));
-    }
-    // debug!("Found open board!");
-    // debug!("{:?}", board);
-    Ok(board)
   }
   pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {
     self.full_paths.get(&filename)
@@ -353,27 +338,56 @@ impl<'a> Plugin {
     self.time_passed() > Duration::from_secs(120)
   }
   // TODO: change sig
-  pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
+  pub fn set_many_items(&mut self, k: &KiCad) -> Result<(), anyhow::Error> {
     debug!("Updating board items...");
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    // TODO: safety
-    let board = self.await_get_open_board()?.unwrap();
+    let board = k.get_open_board()?;
     // TODO: write cooler function
+    let mut attempts = 0;
     let tracks = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get tracks! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) { break tracks; }
+      attempts += 1;
     };
+    attempts = 0;
     let arc_tracks = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get arc tracks! (10 tries)"));
+        return Ok(())
+      };
       // TODO: is this the right variant?
       if let Ok(arc_tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) { break arc_tracks; }
+      attempts += 1;
     };
+    attempts = 0;
     let vias = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get vias! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(vias) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) { break vias; }
+      attempts += 1;
     };
+    attempts = 0;
     let footprint_instances = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get footprint instances! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(footprint_instances) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) { break footprint_instances; }
+      attempts += 1;
     };
+    attempts = 0;
     let pads = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get pads! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(pads) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) { break pads; }
+      attempts += 1;
     };
     items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
