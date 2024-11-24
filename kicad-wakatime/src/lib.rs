@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
+use fltk::prelude::*;
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
@@ -20,7 +21,7 @@ use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 pub mod ui;
 pub mod traits;
 
-use ui::Ui;
+use ui::{Message, Ui};
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -73,13 +74,35 @@ impl<'a> Plugin {
       last_sent_file: String::default(),
     }
   }
+  pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
+    self.set_current_time(self.current_time());
+    let Ok(w) = self.get_active_window() else { return Ok(()); };
+    let Some(ref k) = self.kicad else { return Ok(()); };
+    if w.title.contains("Schematic Editor") {
+      let schematic = k.get_open_schematic()?;
+      // the KiCAD IPC API does not work properly with schematics as of November 2024
+      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
+      // modification without save cannot be sent
+      let schematic_ds = schematic.doc;
+      debug!("schematic_ds = {:?}", schematic_ds.clone());
+      self.set_current_file_from_document_specifier(schematic_ds.clone())?;
+    }
+    else if w.title.contains("PCB Editor") {
+      // for the PCB editor, we can instead use the Rust bindings proper
+      let board = k.get_open_board()?;
+      let board_ds = board.doc;
+      debug!("board_ds = {:?}", board_ds.clone());
+      self.set_current_file_from_document_specifier(board_ds.clone())?;
+      self.set_many_items()?;
+    }
+    Ok(())
+  }
   pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
     let active_window = get_active_window();
     if active_window.clone().is_ok_and(|w| w.title == "") {
       self.dual_error(String::from("Could not get title of active window!"));
       self.dual_error(String::from("If you are on macOS, please give kicad-wakatime Screen Recording permission"));
       self.dual_error(String::from("(System Settings -> Privacy and Security -> Screen Recording)"));
-      // process::exit(1);
     }
     active_window
   }
@@ -185,7 +208,6 @@ impl<'a> Plugin {
     Ok(())
   }
   pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
-    let mut times = 0;
     let k = self.kicad.as_ref().unwrap();
     let mut board: Option<Board>;
     loop {
@@ -194,7 +216,6 @@ impl<'a> Plugin {
         break;
       }
       sleep(Duration::from_secs(5));
-      times += 1;
     }
     // debug!("Found open board!");
     // debug!("{:?}", board);
@@ -295,6 +316,23 @@ impl<'a> Plugin {
       self.maybe_send_heartbeat(self.filename.clone(), true)?;
     }
     Ok(())
+  }
+  pub fn try_ui_recv(&mut self) {
+    match self.ui.receiver.recv() {
+      Some(Message::OpenSettingsWindow) => {
+        self.ui.settings_window_ui.settings_window.show();
+      },
+      Some(Message::CloseSettingsWindow) => {
+        self.ui.settings_window_ui.settings_window.hide();
+        self.store_config();
+      },
+      Some(Message::UpdateSettings) => {
+        self.set_api_key(self.ui.settings_window_ui.api_key.value());
+        self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
+        self.store_config();
+      }
+      None => {},
+    }
   }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
@@ -439,12 +477,11 @@ impl<'a> Plugin {
   }
   /// Return the file name of the WakaTime CLI .zip file for the current OS and architecture. 
   pub fn cli_zip_name(&self, consts: (&'static str, &'static str)) -> String {
-    let (os, arch) = consts;
     format!("{}.zip", self.cli_name(consts))
   }
   /// Return the file name of the WakaTime CLI for the current OS and architecture.
   pub fn cli_exe_name(&self, consts: (&'static str, &'static str)) -> String {
-    let (os, arch) = consts;
+    let (os, _arch) = consts;
     let cli_name = self.cli_name(consts);
     match os {
       "windows" => format!("{cli_name}.exe"),

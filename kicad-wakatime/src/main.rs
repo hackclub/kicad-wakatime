@@ -1,10 +1,7 @@
-use std::thread::sleep;
-use std::time::Duration;
-
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
-use kicad_wakatime::{Plugin, ui::Message, traits::DebugProcesses};
+use kicad_wakatime::{Plugin, traits::DebugProcesses};
 use clap::Parser;
 use env_logger::Env;
 use fltk::prelude::*;
@@ -58,44 +55,21 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
 
   fltk::app::add_idle3(move |_| {
-    plugin.set_current_time(plugin.current_time());
-    let Ok(w) = plugin.get_active_window() else { return; };
-    let Some(ref k) = plugin.kicad else { return; };
-    if w.title.contains("Schematic Editor") {
-      let Ok(schematic) = k.get_open_schematic() else { return; };
-      // the KiCAD IPC API does not work properly with schematics as of November 2024
-      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
-      // modification without save cannot be sent
-      let schematic_ds = schematic.doc;
-      debug!("schematic_ds = {:?}", schematic_ds.clone());
-      plugin.set_current_file_from_document_specifier(schematic_ds.clone());
-    }
-    else if w.title.contains("PCB Editor") {
-      // for the PCB editor, we can instead use the Rust bindings proper
-      let Ok(board) = k.get_open_board() else { return; };
-      let board_ds = board.doc;
-      debug!("board_ds = {:?}", board_ds.clone());
-      plugin.set_current_file_from_document_specifier(board_ds.clone());
-      plugin.set_many_items();
-    } else {
-      debug!("w.title = {}", w.title);
-    }
-    plugin.try_recv();
-    match plugin.ui.receiver.recv() {
-      Some(Message::OpenSettingsWindow) => {
-        plugin.ui.settings_window_ui.settings_window.show();
-      },
-      Some(Message::CloseSettingsWindow) => {
-        plugin.ui.settings_window_ui.settings_window.hide();
-        plugin.store_config();
-      },
-      Some(Message::UpdateSettings) => {
-        plugin.set_api_key(plugin.ui.settings_window_ui.api_key.value());
-        plugin.set_api_url(plugin.ui.settings_window_ui.server_url.value().unwrap());
-        plugin.store_config();
+    // have to handle the error case this way since the callback to add_idle3
+    // does not return Result
+    match plugin.main_loop() {
+      Ok(_) => {},
+      Err(e) => {
+        plugin.dual_error(format!("{:?}", e));
       }
-      None => {},
-    }
+    };
+    match plugin.try_recv() {
+      Ok(_) => {},
+      Err(e) => {
+        plugin.dual_error(format!("{:?}", e));
+      }
+    };
+    plugin.try_ui_recv();
   });
   
   fltk_app.run()?;
