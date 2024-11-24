@@ -61,24 +61,6 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.settings_window_ui.api_key.set_value(api_key.as_str());
   plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
 
-  while fltk_app.wait() {
-    match plugin.ui.receiver.recv() {
-      Some(Message::OpenSettingsWindow) => {
-        plugin.ui.settings_window_ui.settings_window.show();
-      },
-      Some(Message::CloseSettingsWindow) => {
-        plugin.ui.settings_window_ui.settings_window.hide();
-        plugin.store_config();
-      },
-      Some(Message::UpdateSettings) => {
-        plugin.set_api_key(plugin.ui.settings_window_ui.api_key.value());
-        plugin.set_api_url(plugin.ui.settings_window_ui.server_url.value().unwrap());
-        plugin.store_config();
-      }
-      None => {},
-    }
-  }
-
   fltk::app::add_idle3(move |_| {
     plugin.set_current_time(plugin.current_time());
     let Ok(w) = plugin.get_active_window() else { return; };
@@ -103,13 +85,28 @@ fn main() -> Result<(), anyhow::Error> {
       debug!("w.title = {}", w.title);
     }
     plugin.try_recv();
+    match plugin.ui.receiver.recv() {
+      Some(Message::OpenSettingsWindow) => {
+        plugin.ui.settings_window_ui.settings_window.show();
+      },
+      Some(Message::CloseSettingsWindow) => {
+        plugin.ui.settings_window_ui.settings_window.hide();
+        plugin.store_config();
+      },
+      Some(Message::UpdateSettings) => {
+        plugin.set_api_key(plugin.ui.settings_window_ui.api_key.value());
+        plugin.set_api_url(plugin.ui.settings_window_ui.server_url.value().unwrap());
+        plugin.store_config();
+      }
+      None => {},
+    }
     plugin.first_iteration_finished = true;
     if plugin.sleepy {
       sleep(Duration::from_secs(5));
     }
   });
   
-  // fltk_app.run()?;
+  fltk_app.run()?;
 
   Ok(())
 }
