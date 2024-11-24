@@ -18,9 +18,6 @@ pub struct Args {
   debug: bool,
   #[clap(long)]
   disable_heartbeats: bool,
-  /// Sleep for 5 seconds after every iteration
-  #[clap(long)]
-  sleepy: bool,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -43,7 +40,6 @@ fn main() -> Result<(), anyhow::Error> {
   // initialization
   let mut plugin = Plugin::new(
     args.disable_heartbeats,
-    args.sleepy,
   );
   plugin.dual_info(String::from("Initializing kicad-wakatime..."));
 
@@ -101,9 +97,6 @@ fn main() -> Result<(), anyhow::Error> {
       None => {},
     }
     plugin.first_iteration_finished = true;
-    if plugin.sleepy {
-      sleep(Duration::from_secs(5));
-    }
   });
   
   fltk_app.run()?;

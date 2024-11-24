@@ -27,7 +27,6 @@ const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
-  pub sleepy: bool,
   pub config: Ini,
   pub ui: Ui,
   // pub active_window: ActiveWindow,
@@ -55,12 +54,10 @@ pub struct Plugin {
 impl<'a> Plugin {
   pub fn new(
     disable_heartbeats: bool,
-    sleepy: bool,
   ) -> Self {
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
-      sleepy,
       config: Ini::default(),
       ui: Ui::new(),
       tx: None,
