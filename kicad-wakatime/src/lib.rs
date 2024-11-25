@@ -470,8 +470,9 @@ impl<'a> Plugin {
       self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
       return Ok(())
     }
-    let full_path = self.full_path.clone().into_os_string().into_string().unwrap();
-    let quoted_full_path = format!("\"{full_path}\"");
+    let full_path = self.full_path.clone();
+    let full_path_string = full_path.clone().into_os_string().into_string().unwrap();
+    let quoted_full_path = format!("\"{full_path_string}\"");
     let plugin_version = self.version;
     let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
     let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/{plugin_version}\"");
@@ -480,6 +481,7 @@ impl<'a> Plugin {
     let quoted_api_key = format!("\"{api_key}\"");
     let language = self.language();
     let quoted_language = format!("\"{language}\"");
+    let file_stem = full_path.clone().file_stem().unwrap().to_str().unwrap().to_string();
     // TODO: metrics?
     // TODO: api_url?
     // TODO: is_unsaved_entity
@@ -490,6 +492,7 @@ impl<'a> Plugin {
     cli.args(&["--plugin", &quoted_user_agent]);
     cli.args(&["--key", &quoted_api_key]);
     cli.args(&["--language", &quoted_language]);
+    cli.args(&["--project", &file_stem]);
     if is_file_saved {
       cli.arg("--write");
     }
@@ -506,7 +509,7 @@ impl<'a> Plugin {
     // heartbeat should have been sent at this point
     self.dual_info(String::from("Finished!"));
     self.last_sent_time = self.current_time();
-    self.last_sent_file = full_path;
+    self.last_sent_file = full_path_string;
     debug!("last_sent_time = {:?}", self.last_sent_time);
     debug!("last_sent_file = {:?}", self.last_sent_file);
     // update UI
