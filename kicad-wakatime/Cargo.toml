@@ -10,6 +10,7 @@ identifier = "com.hackclub.kicad-wakatime"
 [dependencies]
 active-win-pos-rs = "0.8.3"
 anyhow = "1.0.93"
+chrono = "0.4.38"
 clap = { version = "4.5.21", features = ["derive"] }
 env_logger = "0.11.5"
 fltk = "1.4.36"

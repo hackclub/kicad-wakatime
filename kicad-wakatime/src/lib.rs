@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
+use chrono::Local;
 use fltk::prelude::*;
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
@@ -471,6 +472,9 @@ impl<'a> Plugin {
     self.last_sent_file = full_path;
     debug!("last_sent_time = {:?}", self.last_sent_time);
     debug!("last_sent_file = {:?}", self.last_sent_file);
+    // update UI
+    let formatted_time = Local::now().format("%H:%M:%S");
+    self.ui.main_window_ui.last_heartbeat_box.set_value(format!("{formatted_time}").as_str());
     Ok(())
   }
   /// Return the path to the .wakatime.cfg file.

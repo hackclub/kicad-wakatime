@@ -76,6 +76,8 @@ fn main() -> Result<(), anyhow::Error> {
       }
     };
     plugin.try_ui_recv();
+    plugin.ui.main_window_ui.main_window.redraw();
+    fltk::app::sleep(0.016);
   });
   
   fltk_app.run()?;

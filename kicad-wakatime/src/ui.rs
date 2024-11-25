@@ -19,7 +19,7 @@ pub enum Message {
 #[derive(Clone, Debug)]
 pub struct MainWindowUi {
 	pub main_window: Window,
-	pub status_box: Output,
+	// pub status_box: Output,
 	// pub exit_button: Button,
 	pub log_window: Terminal,
 	pub last_heartbeat_box: Output,
@@ -48,10 +48,10 @@ impl Ui {
     let mut main_window = Window::new(419, 307, 382, 260, None);
     main_window.set_label(r#"kicad-wakatime ^_^"#);
     main_window.set_type(WindowType::Double);
-    let mut status_box = Output::new(107, 15, 92, 22, None);
-    status_box.set_label(r#"status:"#);
-    status_box.set_frame(FrameType::NoBox);
-    status_box.clear_visible_focus();
+    // let mut status_box = Output::new(107, 15, 92, 22, None);
+    // status_box.set_label(r#"status:"#);
+    // status_box.set_frame(FrameType::NoBox);
+    // status_box.clear_visible_focus();
     // let mut exit_button = Button::new(303, 40, 64, 22, None);
     // exit_button.set_label(r#"exit"#);
     let mut log_window = Terminal::new(15, 85, 352, 159, None);
@@ -70,7 +70,7 @@ impl Ui {
     main_window.show();
     let main_window_ui = MainWindowUi {
       main_window,
-      status_box,
+      // status_box,
       // exit_button,
       log_window,
       last_heartbeat_box,
