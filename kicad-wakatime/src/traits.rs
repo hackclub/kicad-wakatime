@@ -26,6 +26,7 @@ pub trait DebugProcesses {
 
 impl DebugProcesses for System {
   fn debug_processes(&self) {
+    debug!("kicad -> {:?}", self.find_process("kicad"));
     debug!("eeschema -> {:?}", self.find_process("eeschema"));
     debug!("pcbnew -> {:?}", self.find_process("pcbnew"));
   }
