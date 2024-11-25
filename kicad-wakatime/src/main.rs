@@ -29,6 +29,10 @@ fn main() -> Result<(), anyhow::Error> {
   };
   env_logger::Builder::from_env(Env::default().default_filter_or(log_level)).init();
   debug!("(os, arch) = {:?}", kicad_wakatime::env_consts());
+
+  #[cfg(target_os = "macos")]
+  core_graphics::access::ScreenCaptureAccess::default().request();
+
   let mut sys = System::new_all();
   sys.refresh_all();
   sys.debug_processes();
