@@ -73,9 +73,10 @@ impl<'a> Plugin {
       last_sent_file: String::default(),
     }
   }
-  pub fn main_loop(&mut self, k: &KiCad) -> Result<(), anyhow::Error> {
+  pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
     self.set_current_time(self.current_time());
     let Ok(w) = self.get_active_window() else { return Ok(()); };
+    let Some(ref k) = self.kicad else { return Ok(()); };
     if w.title.contains("Schematic Editor") {
       let schematic = k.get_open_schematic()?;
       // the KiCAD IPC API does not work properly with schematics as of November 2024
@@ -91,7 +92,7 @@ impl<'a> Plugin {
       let board_ds = board.doc;
       debug!("board_ds = {:?}", board_ds.clone());
       self.set_current_file_from_document_specifier(board_ds.clone())?;
-      self.set_many_items(k)?;
+      self.set_many_items()?;
     }
     Ok(())
   }
@@ -192,22 +193,19 @@ impl<'a> Plugin {
       None => String::new(),
     }
   }
-  pub fn connect_to_kicad(&mut self) -> Result<KiCad, anyhow::Error> {
+  pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
     let k = KiCad::new(KiCadConnectionConfig {
       client_name: String::from("kicad-wakatime"),
       ..Default::default()
-    });
-    match k {
-      Ok(k) => {
-        self.dual_info(format!("Connected to KiCAD! (v{})", k.get_version().unwrap()));
-        Ok(k)
-      },
-      Err(e) => {
-        self.dual_error(String::from("Could not connect to KiCAD!"));
-        self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
-        Err(e.into())
-      },
+    }).ok();
+    if k.is_some() {
+      self.kicad = k;
+      self.dual_info(format!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap()));
+    } else {
+      self.dual_error(String::from("Could not connect to KiCAD!"));
+      self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
     }
+    Ok(())
   }
   pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {
     self.full_paths.get(&filename)
@@ -338,10 +336,11 @@ impl<'a> Plugin {
     self.time_passed() > Duration::from_secs(120)
   }
   // TODO: change sig
-  pub fn set_many_items(&mut self, k: &KiCad) -> Result<(), anyhow::Error> {
+  pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     debug!("Updating board items...");
-    let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
+    let Some(ref k) = self.kicad else { return Ok(()) };
     let board = k.get_open_board()?;
+    let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     // TODO: write cooler function
     let mut attempts = 0;
     let tracks = loop {

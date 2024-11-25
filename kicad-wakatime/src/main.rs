@@ -44,7 +44,7 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.rx = Some(rx);
   plugin.check_cli_installed()?;
   plugin.load_config();
-  let kicad = plugin.connect_to_kicad()?;
+  plugin.connect_to_kicad()?;
 
   plugin.ui.main_window_ui.main_window.end();
   plugin.ui.main_window_ui.main_window.show();
@@ -57,7 +57,7 @@ fn main() -> Result<(), anyhow::Error> {
   fltk::app::add_idle3(move |_| {
     // have to handle the error case this way since the callback to add_idle3
     // does not return Result
-    match plugin.main_loop(&kicad) {
+    match plugin.main_loop() {
       Ok(_) => {},
       Err(e) => {
         plugin.dual_error(format!("{:?}", e));
