@@ -97,7 +97,7 @@ impl<'a> Plugin {
       self.set_current_file_from_document_specifier(board_ds.clone())?;
       self.set_many_items()?;
     } else {
-      debug!("{:?}", w.title);
+      // debug!("{:?}", w.title);
     }
     Ok(())
   }
@@ -214,6 +214,15 @@ impl<'a> Plugin {
     match self.kicad_wakatime_config.with_section(Some("settings")).get("projects_folder") {
       Some(projects_folder) => PathBuf::from(projects_folder),
       None => PathBuf::new(),
+    }
+  }
+  pub fn language(&self) -> String {
+    if self.filename.ends_with(".kicad_sch") {
+      String::from("KiCAD Schematic")
+    } else if self.filename.ends_with(".kicad_pcb") {
+      String::from("KiCAD PCB")
+    } else {
+      unreachable!()
     }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
@@ -469,6 +478,8 @@ impl<'a> Plugin {
     let api_key = self.get_api_key();
     // TODO: api key validity check
     let quoted_api_key = format!("\"{api_key}\"");
+    let language = self.language();
+    let quoted_language = format!("\"{language}\"");
     // TODO: metrics?
     // TODO: api_url?
     // TODO: is_unsaved_entity
@@ -478,6 +489,7 @@ impl<'a> Plugin {
     cli.args(&["--entity", &quoted_full_path]);
     cli.args(&["--plugin", &quoted_user_agent]);
     cli.args(&["--key", &quoted_api_key]);
+    cli.args(&["--language", &quoted_language]);
     if is_file_saved {
       cli.arg("--write");
     }
