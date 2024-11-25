@@ -1,33 +1,35 @@
 use core::str;
 use std::collections::HashMap;
-use std::{fs, process};
+use std::fs;
+use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
-// use std::rc::Rc;
-// use std::sync::{Arc, Mutex, RwLock};
-use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
+use chrono::Local;
+use fltk::prelude::*;
 use ini::Ini;
-use kicad::{KiCad, KiCadConnectionConfig, board::{Board, BoardItem}};
+use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
-use log::warn;
 use log::error;
-// use mouse_position::mouse_position::Mouse;
+use log::warn;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
-use thiserror::Error;
 
+pub mod ui;
 pub mod traits;
+
+use ui::{Message, Ui};
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-#[derive(Default)]
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
+  pub config: Ini,
+  pub ui: Ui,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -42,120 +44,169 @@ pub struct Plugin {
   pub warned_filenames: Vec<String>,
   pub file_watcher: Option<RecommendedWatcher>,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
-  // pub mouse_position: Mouse,
   pub time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
   // the last file that was sent
   pub last_sent_file: String,
-  pub first_iteration_finished: bool,
 }
 
 impl<'a> Plugin {
   pub fn new(
-    disable_heartbeats: bool
+    disable_heartbeats: bool,
   ) -> Self {
-    if disable_heartbeats {
-      warn!("Heartbeats are disabled (using --disable-heartbeats)");
-    }
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
-      ..Default::default()
+      config: Ini::default(),
+      ui: Ui::new(),
+      tx: None,
+      rx: None,
+      kicad: None,
+      filename: String::default(),
+      full_path: PathBuf::default(),
+      full_paths: HashMap::default(),
+      warned_filenames: vec![],
+      file_watcher: None,
+      items: HashMap::default(),
+      time: Duration::default(),
+      last_sent_time: Duration::default(),
+      last_sent_file: String::default(),
     }
   }
-  pub fn get_active_window(&self) -> ActiveWindow {
-    let active_window = get_active_window().expect("Could not get active window!");
-    if active_window.title == "" {
-      error!("Could not get title of active window!");
-      error!("If you are on macOS, please give your terminal Screen Recording permission");
-      error!("(System Settings -> Privacy and Security -> Screen Recording)");
-      process::exit(1);
+  pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
+    self.set_current_time(self.current_time());
+    let Ok(w) = self.get_active_window() else { return Ok(()); };
+    let Some(ref k) = self.kicad else { return Ok(()); };
+    if w.title.contains("Schematic Editor") {
+      let schematic = k.get_open_schematic()?;
+      // the KiCAD IPC API does not work properly with schematics as of November 2024
+      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
+      // modification without save cannot be sent
+      let schematic_ds = schematic.doc;
+      debug!("schematic_ds = {:?}", schematic_ds.clone());
+      self.set_current_file_from_document_specifier(schematic_ds.clone())?;
+    }
+    else if w.title.contains("PCB Editor") {
+      // for the PCB editor, we can instead use the Rust bindings proper
+      let board = k.get_open_board()?;
+      let board_ds = board.doc;
+      debug!("board_ds = {:?}", board_ds.clone());
+      self.set_current_file_from_document_specifier(board_ds.clone())?;
+      self.set_many_items()?;
+    }
+    Ok(())
+  }
+  pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
+    let active_window = get_active_window();
+    // as far as i can tell, active_win_pos_rs will focus on kicad-wakatime
+    // when it starts, and that window should by all means have a title.
+    // if the field is empty, kicad-wakatime is missing permissions
+    if active_window.clone().is_ok_and(|w| (w.app_name == "kicad-wakatime" || w.app_name == "FLTK") && w.title == "") {
+      self.dual_error(String::from("Could not get title of active window!"));
+      self.dual_error(String::from("If you are on macOS, please give kicad-wakatime Screen Recording permission"));
+      self.dual_error(String::from("(System Settings -> Privacy and Security -> Screen Recording)"));
     }
     active_window
   }
-  pub fn check_cli_installed(&self) -> Result<(), anyhow::Error> {
+  pub fn check_cli_installed(&mut self) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
-    info!("WakaTime CLI path: {:?}", cli_path);
+    self.dual_info(format!("WakaTime CLI path: {:?}", cli_path));
     if fs::exists(cli_path)? {
-      info!("File exists!");
+      self.dual_info(String::from("File exists!"));
       // TODO: update to latest version if needed
     } else {
-      // TODO: download latest version
-      error!("File does not exist!");
-      error!("Ensure this file exists before proceeding");
-      return Err(PluginError::CliNotFound.into())
+      info!("File does not exist!");
+      self.get_latest_release();
     }
     Ok(())
   }
-  pub fn get_api_key(&mut self) -> Result<String, anyhow::Error> {
-    let cfg_path = self.cfg_path();
-    // TODO: remove expects
-    // TODO: prompt for and store API key if not found
-    let cfg = Ini::load_from_file(cfg_path).expect("Could not get ~/.wakatime.cfg!");
-    let cfg_settings = cfg.section(Some("settings")).expect("Could not get settings from ~/.wakatime.cfg!");
-    let api_key = cfg_settings.get("api_key").expect("Could not get API key!");
-    // debug!("api_key = {api_key}");
-    Ok(api_key.to_string())
+  pub fn get_latest_release(&mut self) {
+    info!("Downloading latest WakaTime CLI...");
+    let client = reqwest::blocking::Client::new();
+    // need to insert some kind of user agent to avoid getting 403 forbidden
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("user-agent", "kicad-wakatime/1.0".parse().unwrap());
+    // create .wakatime folder if it does not exist
+    // we will be downloading the .zip into there
+    if let Ok(false) = fs::exists(self.wakatime_folder_path()) {
+      fs::create_dir(self.wakatime_folder_path());
+    }
+    // get download URL
+    let res = client.get("https://api.github.com/repos/wakatime/wakatime-cli/releases/latest")
+      .headers(headers.clone())
+      .send()
+      .expect("Could not make request!");
+    let json = res.json::<serde_json::Value>().unwrap();
+    let asset = json["assets"]
+      .as_array()
+      .unwrap()
+      .into_iter()
+      .find(|v| v["name"].as_str().unwrap().to_owned() == self.cli_zip_name(env_consts()))
+      .unwrap();
+    let download_url = asset["browser_download_url"].as_str().unwrap().to_owned();
+    // download .zip file
+    let res = client.get(download_url)
+      .headers(headers)
+      .send()
+      .expect("Could not make request!");
+    let zip_bytes = res.bytes().expect("Could not parse bytes!");
+    debug!("{:?}", self.cli_zip_path(env_consts()));
+    let mut zip_file = fs::File::create(self.cli_zip_path(env_consts())).unwrap();
+    zip_file.write_all(&zip_bytes);
+    let zip_vec_u8: Vec<u8> = fs::read(self.cli_zip_path(env_consts())).unwrap();
+    // extract .zip file
+    zip_extract::extract(
+      Cursor::new(zip_vec_u8),
+      &self.wakatime_folder_path(),
+      true
+    );
+    // remove zip file
+    fs::remove_file(self.cli_zip_path(env_consts()));
   }
-  pub fn await_connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
-    let mut times = 0;
-    let mut k: Option<KiCad>;
-    loop {
-      // if times == 6 {
-      //   error!("Could not connect to KiCAD! (30s)");
-      //   error!("Ensure KiCAD is open and the KiCAD API is enabled (Preferences -> Plugins -> Enable KiCAD API)");
-      //   return Err(PluginError::CouldNotConnect.into())
-      // }
-      info!("Waiting for KiCAD... ({times})");
-      k = KiCad::new(KiCadConnectionConfig {
-        client_name: String::from("kicad-wakatime"),
-        ..Default::default()
-      }).ok();
-      if k.is_some() {
-        break;
-      }
-      sleep(Duration::from_secs(5));
-      times += 1;
+  pub fn load_config(&mut self) {
+    let wakatime_cfg_path = self.wakatime_cfg_path();
+    if !fs::exists(&wakatime_cfg_path).unwrap() {
+      Ini::new().write_to_file(&wakatime_cfg_path);
     }
-    self.kicad = k;
-    info!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap());
-    // if the loop was immediately able to find KiCAD,
-    // that means KiCAD was already open when the plugin started.
-    // KiCAD needs to be opened after kicad-wakatime; otherwise, active-win-pos-rs
-    // will focus on the shell forever, instead of the actual focused windows
-    // TODO: get the plugin to spawn KiCAD instead?
-    if times == 0 {
-      error!("KiCAD was opened before kicad-wakatime!");
-      error!("Please close KiCAD, restart kicad-wakatime, then open KiCAD last");
-      process::exit(1);
+    self.config = Ini::load_from_file(&wakatime_cfg_path).unwrap();
+  }
+  pub fn store_config(&self) {
+    Ini::write_to_file(&self.config, self.wakatime_cfg_path());
+  }
+  pub fn set_api_key(&mut self, api_key: String) {
+    self.config.with_section(Some("settings"))
+      .set("api_key", api_key);
+  }
+  pub fn get_api_key(&mut self) -> String {
+    match self.config.with_section(Some("settings")).get("api_key") {
+      Some(api_key) => api_key.to_string(),
+      None => String::new(),
     }
-    debug!("self.kicad = {:?}", self.kicad);
+  }
+  pub fn set_api_url(&mut self, api_url: String) {
+    self.config.with_section(Some("settings"))
+      .set("api_url", api_url);
+  }
+  pub fn get_api_url(&mut self) -> String {
+    match self.config.with_section(Some("settings")).get("api_url") {
+      Some(api_url) => api_url.to_string(),
+      None => String::new(),
+    }
+  }
+  pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
+    let k = KiCad::new(KiCadConnectionConfig {
+      client_name: String::from("kicad-wakatime"),
+      ..Default::default()
+    }).ok();
+    if k.is_some() {
+      self.kicad = k;
+      self.dual_info(format!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap()));
+    } else {
+      self.dual_error(String::from("Could not connect to KiCAD!"));
+      self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
+    }
     Ok(())
-  }
-  // TODO: plugin only works in PCB editor - get open documents, not open board
-  pub fn await_get_open_board<'b>(&'b mut self) -> Result<Option<Board<'a>>, anyhow::Error> where 'b: 'a {
-  // pub fn await_get_open_board(&mut self) -> Result<(), anyhow::Error> {
-    let mut times = 0;
-    let k = self.kicad.as_ref().unwrap();
-    let mut board: Option<Board>;
-    loop {
-      // if times == 6 {
-      //   error!("Could not find open board! (30s)");
-      //   error!("Ensure that a board is open in the Schematic Editor or PCB Editor");
-      //   return Err(PluginError::NoOpenBoard.into())
-      // }
-      // debug!("Waiting for open board... ({times})");
-      board = k.get_open_board().ok();
-      if board.is_some() {
-        break;
-      }
-      sleep(Duration::from_secs(5));
-      times += 1;
-    }
-    // debug!("Found open board!");
-    // debug!("{:?}", board);
-    Ok(board)
   }
   pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {
     self.full_paths.get(&filename)
@@ -167,7 +218,6 @@ impl<'a> Plugin {
     let Some(Identifier::BoardFilename(ref filename)) = specifier.identifier else { unreachable!(); };
     filename.to_string()
   }
-  // pub fn set_current_file_from_identifier(&mut self, identifier: Identifier) -> Result<(), anyhow::Error> {
   pub fn set_current_file_from_document_specifier(
     &mut self,
     specifier: DocumentSpecifier,
@@ -176,8 +226,6 @@ impl<'a> Plugin {
     // filename
     // TODO: other variants
     let filename = self.get_filename_from_document_specifier(&specifier);
-    // info!("filename = {}", filename.clone());
-    // info!("Current file updated to {}", filename.clone());
     // full path
     let project = specifier.project.0;
     let full_path = match project {
@@ -201,9 +249,9 @@ impl<'a> Plugin {
       None => {
         if self.get_full_path(filename.clone()).is_none() {
           if !self.warned_filenames.contains(&filename) {
-            warn!("Schematic \"{}\" cannot be tracked yet!", filename.clone());
-            warn!("Please switch to the PCB editor first!");
-            warn!("You can then track time spent in both the schematic editor and PCB editor for this project");
+            self.dual_warn(format!("Schematic \"{}\" cannot be tracked yet!", filename.clone()));
+            self.dual_warn(String::from("Please switch to the PCB editor first!"));
+            self.dual_warn(String::from("You can then track time spent in both the schematic editor and PCB editor for this project"));
             self.warned_filenames.push(filename.clone());
           }
           return Ok(())
@@ -211,14 +259,13 @@ impl<'a> Plugin {
         self.get_full_path(filename.clone()).unwrap().to_path_buf()
       }
     };
-    // debug!("board_filename = {board_filename}");
     if self.filename != filename {
-      info!("Focused file changed!");
+      self.dual_info(String::from("Focused file changed!"));
       // since the focused file changed, it might be time to send a heartbeat.
       // self.filename and self.path are not actually updated here unless they
       // were empty before, so self.maybe_send_heartbeat() can use the difference
       // as a condition in its check
-      info!("Filename: {}", filename.clone());
+      self.dual_info(format!("Filename: {}", filename.clone()));
       if self.filename != String::new() {
         self.maybe_send_heartbeat(filename.clone(), false)?;
       } else {
@@ -239,11 +286,9 @@ impl<'a> Plugin {
     Ok(())
   }
   pub fn watch_file(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
-    // let path = PathBuf::from("/Users/lux/file.txt");
-    // info!("Watching {:?} for changes...", path);
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
-    info!("Watcher set up to watch {:?} for changes", path);
+    self.dual_info(format!("Watcher set up to watch {:?} for changes", path));
     Ok(())
   }
   pub fn try_recv(&mut self) -> Result<(), anyhow::Error> {
@@ -254,10 +299,27 @@ impl<'a> Plugin {
       // TODO: use debouncer instead
       let _ = rx.try_recv();
       // TODO: variant check?
-      info!("File saved!");
+      self.dual_info(String::from("File saved!"));
       self.maybe_send_heartbeat(self.filename.clone(), true)?;
     }
     Ok(())
+  }
+  pub fn try_ui_recv(&mut self) {
+    match self.ui.receiver.recv() {
+      Some(Message::OpenSettingsWindow) => {
+        self.ui.settings_window_ui.settings_window.show();
+      },
+      Some(Message::CloseSettingsWindow) => {
+        self.ui.settings_window_ui.settings_window.hide();
+        self.store_config();
+      },
+      Some(Message::UpdateSettings) => {
+        self.set_api_key(self.ui.settings_window_ui.api_key.value());
+        self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
+        self.store_config();
+      }
+      None => {},
+    }
   }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
@@ -277,32 +339,61 @@ impl<'a> Plugin {
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     debug!("Updating board items...");
+    let Some(ref k) = self.kicad else { return Ok(()) };
+    let board = k.get_open_board()?;
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    // TODO: safety
-    let board = self.await_get_open_board()?.unwrap();
     // TODO: write cooler function
+    let mut attempts = 0;
     let tracks = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get tracks! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) { break tracks; }
+      attempts += 1;
     };
+    attempts = 0;
     let arc_tracks = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get arc tracks! (10 tries)"));
+        return Ok(())
+      };
       // TODO: is this the right variant?
       if let Ok(arc_tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) { break arc_tracks; }
+      attempts += 1;
     };
+    attempts = 0;
     let vias = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get vias! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(vias) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) { break vias; }
+      attempts += 1;
     };
+    attempts = 0;
     let footprint_instances = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get footprint instances! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(footprint_instances) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) { break footprint_instances; }
+      attempts += 1;
     };
+    attempts = 0;
     let pads = loop {
+      if attempts > 10 {
+        self.dual_warn(String::from("Could not get pads! (10 tries)"));
+        return Ok(())
+      };
       if let Ok(pads) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) { break pads; }
+      attempts += 1;
     };
     items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
     items_new.insert(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
     items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
-    // if self.items.iter().count() > 0 && self.items != items_new {
     if self.items != items_new {
       debug!("Board items changed!");
       self.items = items_new;
@@ -314,7 +405,6 @@ impl<'a> Plugin {
     } else {
       debug!("Board items did not change!");
     }
-    // set
     Ok(())
   }
   /// Send a heartbeat if conditions are met.
@@ -325,13 +415,6 @@ impl<'a> Plugin {
     is_file_saved: bool
   ) -> Result<(), anyhow::Error> {
     debug!("Determining whether to send heartbeat...");
-    // on the first iteration of the main loop, multiple values used to determine
-    // whether a heartbeat should be sent are updated from their defaults, so any
-    // heartbeats that would be sent are false positives that should be ignored
-    if !self.first_iteration_finished {
-      debug!("Not sending heartbeat (first iteration)");
-      return Ok(());
-    }
     if self.last_sent_time == Duration::ZERO {
       debug!("No heartbeats have been sent since the plugin opened");
     } else {
@@ -348,9 +431,9 @@ impl<'a> Plugin {
     Ok(())
   }
   pub fn send_heartbeat(&mut self, is_file_saved: bool) -> Result<(), anyhow::Error> {
-    info!("Sending heartbeat...");
+    self.dual_info(String::from("Sending heartbeat..."));
     if self.disable_heartbeats {
-      warn!("Heartbeats are disabled (using --disable-heartbeats)");
+      self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
       return Ok(())
     }
     let full_path = self.full_path.clone().into_os_string().into_string().unwrap();
@@ -358,7 +441,8 @@ impl<'a> Plugin {
     let plugin_version = self.version;
     let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
     let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/{plugin_version}\"");
-    let api_key = self.get_api_key()?;
+    let api_key = self.get_api_key();
+    // TODO: api key validity check
     let quoted_api_key = format!("\"{api_key}\"");
     // TODO: metrics?
     // TODO: api_url?
@@ -366,55 +450,87 @@ impl<'a> Plugin {
     // create process
     let cli_path = self.cli_path(env_consts());
     let mut cli = std::process::Command::new(cli_path);
-    // cli.args(cli_args.split(' ').collect::<Vec<&str>>());
     cli.args(&["--entity", &quoted_full_path]);
     cli.args(&["--plugin", &quoted_user_agent]);
     cli.args(&["--key", &quoted_api_key]);
     if is_file_saved {
       cli.arg("--write");
     }
-    info!("Executing WakaTime CLI...");
-    // cli.spawn().expect("Could not spawn WakaTime CLI!");
+    self.dual_info(String::from("Executing WakaTime CLI..."));
     let cli_output = cli.output()
       .expect("Could not execute WakaTime CLI!");
     let cli_status = cli_output.status;
     let cli_stdout = cli_output.stdout;
     let cli_stderr = cli_output.stderr;
     // TODO: handle failing statuses
-    info!("cli_status = {cli_status}");
-    info!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
-    info!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
+    debug!("cli_status = {cli_status}");
+    debug!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
+    debug!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
     // heartbeat should have been sent at this point
-    info!("Finished!");
+    self.dual_info(String::from("Finished!"));
     self.last_sent_time = self.current_time();
     self.last_sent_file = full_path;
-    info!("last_sent_time = {:?}", self.last_sent_time);
-    info!("last_sent_file = {:?}", self.last_sent_file);
+    debug!("last_sent_time = {:?}", self.last_sent_time);
+    debug!("last_sent_file = {:?}", self.last_sent_file);
+    // update UI
+    let formatted_time = Local::now().format("%H:%M:%S");
+    self.ui.main_window_ui.last_heartbeat_box.set_value(format!("{formatted_time}").as_str());
     Ok(())
   }
-  pub fn cfg_path(&self) -> PathBuf {
+  /// Return the path to the .wakatime.cfg file.
+  pub fn wakatime_cfg_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
     home_dir.join(".wakatime.cfg")
   }
-  pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
-    let (os, arch) = consts;
+  /// Return the path to the .wakatime folder.
+  pub fn wakatime_folder_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
-    let cli_name = match os {
-      "windows" => format!("wakatime-cli-windows-{arch}.exe"),
-      _o => format!("wakatime-cli-{os}-{arch}"),
-    };
-    home_dir.join(".wakatime").join(cli_name)
+    home_dir.join(".wakatime")
   }
-}
-
-#[derive(Debug, Error)]
-pub enum PluginError {
-  #[error("Could not find WakaTime CLI!")]
-  CliNotFound,
-  // #[error("Could not connect to KiCAD!")]
-  // CouldNotConnect,
-  // #[error("Could not find open board!")]
-  // NoOpenBoard,
+  /// Return the file stem of the WakaTime CLI for the current OS and architecture.
+  pub fn cli_name(&self, consts: (&'static str, &'static str)) -> String {
+    let (os, arch) = consts;
+    match os {
+      "windows" => format!("wakatime-cli-windows-{arch}"),
+      _o => format!("wakatime-cli-{os}-{arch}"),
+    }
+  }
+  /// Return the file name of the WakaTime CLI .zip file for the current OS and architecture. 
+  pub fn cli_zip_name(&self, consts: (&'static str, &'static str)) -> String {
+    format!("{}.zip", self.cli_name(consts))
+  }
+  /// Return the file name of the WakaTime CLI for the current OS and architecture.
+  pub fn cli_exe_name(&self, consts: (&'static str, &'static str)) -> String {
+    let (os, _arch) = consts;
+    let cli_name = self.cli_name(consts);
+    match os {
+      "windows" => format!("{cli_name}.exe"),
+      _o => cli_name,
+    }
+  }
+  /// Return the path to the WakaTime CLI for the current OS and architecture.
+  pub fn cli_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
+    let wakatime_folder_path = self.wakatime_folder_path();
+    let cli_exe_name = self.cli_exe_name(consts);
+    wakatime_folder_path.join(cli_exe_name)
+  }
+  /// Return the path to the downloaded WakaTime CLI .zip file for the current OS and architecture.
+  /// The file is downloaded into the .wakatime folder.
+  pub fn cli_zip_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
+    self.wakatime_folder_path().join(self.cli_zip_name(consts))
+  }
+  pub fn dual_info(&mut self, s: String) {
+    info!("{}", s);
+    self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
+  }
+  pub fn dual_warn(&mut self, s: String) {
+    warn!("{}", s);
+    self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
+  }
+  pub fn dual_error(&mut self, s: String) {
+    error!("{}", s);
+    self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
+  }
 }
 
 /// Return the current OS and ARCH.

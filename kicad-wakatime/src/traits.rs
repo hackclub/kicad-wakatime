@@ -11,7 +11,9 @@ impl FindProcess for System {
   fn find_process(&self, name: &str) -> Option<(&Pid, &Process)> {
     self.processes()
       .iter()
-      .filter(|(_pid, process)| process.exe().is_some_and(|e| e.ends_with(name)))
+      .filter(|(_pid, process)| process.exe().is_some_and(
+        |e| e.ends_with(name) || e.ends_with(format!("{name}.exe"))
+      ))
       .collect::<Vec<_>>()
       .first()
       .cloned()

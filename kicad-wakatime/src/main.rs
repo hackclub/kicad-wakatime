@@ -1,15 +1,11 @@
-use std::thread::sleep;
-use std::time::Duration;
-
-use kicad_wakatime::{Plugin, traits::DebugProcesses};
-// use std::fs;
-// use std::process;
-use active_win_pos_rs::get_active_window;
+// use cocoa::appkit::NSApp;
+// use cocoa::appkit::NSApplication;
+// use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
+use kicad_wakatime::{traits::{DebugProcesses, FindProcess}, Plugin};
 use clap::Parser;
 use env_logger::Env;
+use fltk::prelude::*;
 use log::debug;
-// use log::error;
-use log::info;
 use sysinfo::System;
 
 /// WakaTime plugin for KiCAD nightly
@@ -19,9 +15,6 @@ pub struct Args {
   debug: bool,
   #[clap(long)]
   disable_heartbeats: bool,
-  /// Sleep for 5 seconds after every iteration
-  #[clap(long)]
-  sleepy: bool,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -39,50 +32,55 @@ fn main() -> Result<(), anyhow::Error> {
 
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 
+  let fltk_app = fltk::app::App::default();
+
   // initialization
-  info!("Initializing kicad-wakatime...");
   let mut plugin = Plugin::new(
     args.disable_heartbeats,
   );
+  plugin.dual_info(String::from("Initializing kicad-wakatime..."));
+
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
-  // plugin.create_file_watcher()?;
-  // plugin.file_watcher = Some(watcher);
   plugin.check_cli_installed()?;
-  plugin.get_api_key()?;
-  plugin.await_connect_to_kicad()?;
+  plugin.load_config();
+  plugin.connect_to_kicad()?;
 
-  // main loop
-  loop {
-    plugin.set_current_time(plugin.current_time());
-    let w = plugin.get_active_window();
-    debug!("w.title = {}", w.title);
-    let k = plugin.kicad.as_ref().unwrap();
-    if w.title.contains("Schematic Editor") {
-      let schematic = k.get_open_schematic()?;
-      // the KiCAD IPC API does not work properly with schematics as of November 2024
-      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
-      // modification without save cannot be sent
-      let schematic_ds = schematic.doc;
-      debug!("schematic_ds = {:?}", schematic_ds.clone());
-      plugin.set_current_file_from_document_specifier(schematic_ds.clone())?;
-    }
-    else if w.title.contains("PCB Editor") {
-      // for the PCB editor, we can instead use the Rust bindings proper
-      let board = k.get_open_board()?;
-      let board_ds = board.doc;
-      debug!("board_ds = {:?}", board_ds.clone());
-      plugin.set_current_file_from_document_specifier(board_ds.clone())?;
-      plugin.set_many_items()?;
-    } else {
-    }
-    plugin.try_recv()?;
-    plugin.first_iteration_finished = true;
-    if args.sleepy {
-      sleep(Duration::from_secs(5));
-    }
-  }
+  plugin.ui.main_window_ui.main_window.end();
+  plugin.ui.main_window_ui.main_window.show();
+  // settings population
+  let api_key = plugin.get_api_key();
+  let api_url = plugin.get_api_url();
+  plugin.ui.settings_window_ui.api_key.set_value(api_key.as_str());
+  plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
 
-  // TODO: this is unreachable
+  fltk::app::add_idle3(move |_| {
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    if plugin.kicad.is_some() && sys.find_process("kicad").is_none() {
+      plugin.dual_error(String::from("Lost connection to KiCAD!"));
+      plugin.kicad = None;
+      return;
+    }
+    // have to handle the error case this way since the callback to add_idle3
+    // does not return Result
+    match plugin.main_loop() {
+      Ok(_) => {},
+      Err(e) => {
+        plugin.dual_error(format!("{:?}", e));
+      }
+    };
+    match plugin.try_recv() {
+      Ok(_) => {},
+      Err(e) => {
+        plugin.dual_error(format!("{:?}", e));
+      }
+    };
+    plugin.try_ui_recv();
+    plugin.ui.main_window_ui.main_window.redraw();
+    fltk::app::sleep(0.016);
+  });
+  
+  fltk_app.run()?;
+
   Ok(())
 }
