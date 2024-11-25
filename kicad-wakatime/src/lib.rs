@@ -113,20 +113,23 @@ impl<'a> Plugin {
     }
     active_window
   }
-  pub fn check_cli_installed(&mut self) -> Result<(), anyhow::Error> {
+  pub fn check_cli_installed(&mut self, redownload: bool) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
     self.dual_info(format!("WakaTime CLI path: {:?}", cli_path));
     if fs::exists(cli_path)? {
       self.dual_info(String::from("File exists!"));
       // TODO: update to latest version if needed
     } else {
-      info!("File does not exist!");
-      self.get_latest_release();
+      self.dual_info(String::from("File does not exist!"));
+      self.get_latest_release()?;
+    }
+    if redownload {
+      self.dual_info(String::from("Redownloading WakaTime CLI (--redownload used)"));
+      self.get_latest_release()?;
     }
     Ok(())
   }
-  pub fn get_latest_release(&mut self) {
-    info!("Downloading latest WakaTime CLI...");
+  pub fn get_latest_release(&mut self) -> Result<(), anyhow::Error> {
     let client = reqwest::blocking::Client::new();
     // need to insert some kind of user agent to avoid getting 403 forbidden
     let mut headers = reqwest::header::HeaderMap::new();
@@ -134,9 +137,10 @@ impl<'a> Plugin {
     // create .wakatime folder if it does not exist
     // we will be downloading the .zip into there
     if let Ok(false) = fs::exists(self.wakatime_folder_path()) {
-      fs::create_dir(self.wakatime_folder_path());
+      fs::create_dir(self.wakatime_folder_path())?;
     }
     // get download URL
+    self.dual_info(String::from("Getting latest version from GitHub API"));
     let res = client.get("https://api.github.com/repos/wakatime/wakatime-cli/releases/latest")
       .headers(headers.clone())
       .send()
@@ -150,23 +154,27 @@ impl<'a> Plugin {
       .unwrap();
     let download_url = asset["browser_download_url"].as_str().unwrap().to_owned();
     // download .zip file
+    self.dual_info(format!("Downloading {download_url}..."));
     let res = client.get(download_url)
       .headers(headers)
       .send()
       .expect("Could not make request!");
     let zip_bytes = res.bytes().expect("Could not parse bytes!");
-    debug!("{:?}", self.cli_zip_path(env_consts()));
     let mut zip_file = fs::File::create(self.cli_zip_path(env_consts())).unwrap();
-    zip_file.write_all(&zip_bytes);
+    zip_file.write_all(&zip_bytes)?;
     let zip_vec_u8: Vec<u8> = fs::read(self.cli_zip_path(env_consts())).unwrap();
     // extract .zip file
+    self.dual_info(String::from("Extracting .zip..."));
     zip_extract::extract(
       Cursor::new(zip_vec_u8),
       &self.wakatime_folder_path(),
       true
-    );
+    )?;
     // remove zip file
-    fs::remove_file(self.cli_zip_path(env_consts()));
+    fs::remove_file(self.cli_zip_path(env_consts()))?;
+    // return
+    self.dual_info(String::from("Finished!"));
+    Ok(())
   }
   pub fn load_config(&mut self) {
     // wakatime config

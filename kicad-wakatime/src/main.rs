@@ -15,6 +15,9 @@ pub struct Args {
   debug: bool,
   #[clap(long)]
   disable_heartbeats: bool,
+  #[clap(long)]
+  /// Redownload WakaTime CLI
+  redownload: bool,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -42,7 +45,7 @@ fn main() -> Result<(), anyhow::Error> {
 
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
-  plugin.check_cli_installed()?;
+  plugin.check_cli_installed(args.redownload)?;
   plugin.load_config();
   plugin.connect_to_kicad()?;
 
