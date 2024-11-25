@@ -217,16 +217,18 @@ impl<'a> Plugin {
     }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
+    std::thread::sleep(Duration::from_millis(500));
     let k = KiCad::new(KiCadConnectionConfig {
       client_name: String::from("kicad-wakatime"),
       ..Default::default()
     }).ok();
     if k.is_some() {
       self.kicad = k;
-      self.dual_info(format!("Connected to KiCAD! (v{})", self.kicad.as_ref().unwrap().get_version().unwrap()));
+      self.dual_info(format!("Connected to KiCAD!"));
     } else {
       self.dual_error(String::from("Could not connect to KiCAD!"));
-      self.dual_error(String::from("Please open KiCAD before opening kicad-wakatime!"));
+      self.dual_error(String::from("Please ensure you are running KiCAD 8.99, and the KiCAD API is enabled"));
+      self.dual_error(String::from("(Settings -> Plugins -> Enable KiCAD API)"));
     }
     Ok(())
   }

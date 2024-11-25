@@ -59,17 +59,19 @@ fn main() -> Result<(), anyhow::Error> {
   fltk::app::add_idle3(move |_| {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     if plugin.kicad.is_some() && sys.find_process("kicad").is_none() {
-      plugin.dual_error(String::from("Lost connection to KiCAD!"));
+      plugin.dual_warn(String::from("Lost connection to KiCAD!"));
       plugin.kicad = None;
+      return;
+    }
+    if plugin.kicad.is_none() && sys.find_process("kicad").is_some() {
+      let _ = plugin.connect_to_kicad();
       return;
     }
     // have to handle the error case this way since the callback to add_idle3
     // does not return Result
     match plugin.main_loop() {
       Ok(_) => {},
-      Err(e) => {
-        plugin.dual_error(format!("{:?}", e));
-      }
+      Err(e) => { plugin.dual_error(format!("{:?}", e)); }
     };
     match plugin.try_recv() {
       Ok(_) => {},
