@@ -49,8 +49,10 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.main_window_ui.main_window.end();
   plugin.ui.main_window_ui.main_window.show();
   // settings population
+  let kicad_project = plugin.get_kicad_project();
   let api_key = plugin.get_api_key();
   let api_url = plugin.get_api_url();
+  plugin.ui.settings_window_ui.kicad_project.set_value(kicad_project.to_str().unwrap());
   plugin.ui.settings_window_ui.api_key.set_value(api_key.as_str());
   plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
 

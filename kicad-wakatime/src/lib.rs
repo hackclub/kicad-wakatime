@@ -28,7 +28,8 @@ const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
-  pub config: Ini,
+  pub wakatime_config: Ini,
+  pub kicad_wakatime_config: Ini,
   pub ui: Ui,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
@@ -58,7 +59,8 @@ impl<'a> Plugin {
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
-      config: Ini::default(),
+      wakatime_config: Ini::default(),
+      kicad_wakatime_config: Ini::default(),
       ui: Ui::new(),
       tx: None,
       rx: None,
@@ -165,33 +167,51 @@ impl<'a> Plugin {
     fs::remove_file(self.cli_zip_path(env_consts()));
   }
   pub fn load_config(&mut self) {
+    // wakatime config
     let wakatime_cfg_path = self.wakatime_cfg_path();
     if !fs::exists(&wakatime_cfg_path).unwrap() {
       Ini::new().write_to_file(&wakatime_cfg_path);
     }
-    self.config = Ini::load_from_file(&wakatime_cfg_path).unwrap();
+    self.wakatime_config = Ini::load_from_file(&wakatime_cfg_path).unwrap();
+    // kicad-wakatime config
+    let kicad_wakatime_cfg_path = self.kicad_wakatime_cfg_path();
+    if !fs::exists(&kicad_wakatime_cfg_path).unwrap() {
+      Ini::new().write_to_file(&kicad_wakatime_cfg_path);
+    }
+    self.kicad_wakatime_config = Ini::load_from_file(&kicad_wakatime_cfg_path).unwrap();
   }
   pub fn store_config(&self) {
-    Ini::write_to_file(&self.config, self.wakatime_cfg_path());
+    Ini::write_to_file(&self.wakatime_config, self.wakatime_cfg_path());
+    Ini::write_to_file(&self.kicad_wakatime_config, self.kicad_wakatime_cfg_path());
   }
   pub fn set_api_key(&mut self, api_key: String) {
-    self.config.with_section(Some("settings"))
+    self.wakatime_config.with_section(Some("settings"))
       .set("api_key", api_key);
   }
   pub fn get_api_key(&mut self) -> String {
-    match self.config.with_section(Some("settings")).get("api_key") {
+    match self.wakatime_config.with_section(Some("settings")).get("api_key") {
       Some(api_key) => api_key.to_string(),
       None => String::new(),
     }
   }
   pub fn set_api_url(&mut self, api_url: String) {
-    self.config.with_section(Some("settings"))
+    self.wakatime_config.with_section(Some("settings"))
       .set("api_url", api_url);
   }
   pub fn get_api_url(&mut self) -> String {
-    match self.config.with_section(Some("settings")).get("api_url") {
+    match self.wakatime_config.with_section(Some("settings")).get("api_url") {
       Some(api_url) => api_url.to_string(),
       None => String::new(),
+    }
+  }
+  pub fn set_kicad_project(&mut self, kicad_project: String) {
+    self.kicad_wakatime_config.with_section(Some("settings"))
+      .set("kicad_project", kicad_project);
+  }
+  pub fn get_kicad_project(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("kicad_project") {
+      Some(kicad_project) => PathBuf::from(kicad_project),
+      None => PathBuf::new(),
     }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
@@ -314,6 +334,7 @@ impl<'a> Plugin {
         self.store_config();
       },
       Some(Message::UpdateSettings) => {
+        self.set_kicad_project(self.ui.settings_window_ui.kicad_project.value());
         self.set_api_key(self.ui.settings_window_ui.api_key.value());
         self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
         self.store_config();
@@ -481,6 +502,11 @@ impl<'a> Plugin {
   pub fn wakatime_cfg_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
     home_dir.join(".wakatime.cfg")
+  }
+  /// Return the path to the .kicad-wakatime.cfg file.
+  pub fn kicad_wakatime_cfg_path(&self) -> PathBuf {
+    let home_dir = home::home_dir().expect("Unable to get your home directory!");
+    home_dir.join(".kicad-wakatime.cfg")
   }
   /// Return the path to the .wakatime folder.
   pub fn wakatime_folder_path(&self) -> PathBuf {
