@@ -1,7 +1,7 @@
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
-use kicad_wakatime::{Plugin, traits::DebugProcesses};
+use kicad_wakatime::{traits::{DebugProcesses, FindProcess}, Plugin};
 use clap::Parser;
 use env_logger::Env;
 use fltk::prelude::*;
@@ -55,6 +55,12 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
 
   fltk::app::add_idle3(move |_| {
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    if plugin.kicad.is_some() && sys.find_process("kicad").is_none() {
+      plugin.dual_error(String::from("Lost connection to KiCAD!"));
+      plugin.kicad = None;
+      return;
+    }
     // have to handle the error case this way since the callback to add_idle3
     // does not return Result
     match plugin.main_loop() {
