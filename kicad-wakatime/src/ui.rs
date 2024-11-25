@@ -29,7 +29,7 @@ pub struct MainWindowUi {
 #[derive(Clone, Debug)]
 pub struct SettingsWindowUi {
   pub settings_window: Window,
-  pub kicad_project: Input,
+  pub projects_folder: Input,
   pub api_key: Input,
   pub server_url: InputChoice,
   pub ok_button: ReturnButton,
@@ -82,14 +82,14 @@ impl Ui {
     settings_window.make_modal(true);
     settings_window.set_label(r#"kicad-wakatime settings ^w^"#);
     settings_window.set_type(WindowType::Double);
-    let mut kicad_project = Input::new(15, 29, 420, 24, None);
-    kicad_project.set_label(r#"what project do you want to track?"#);
-    kicad_project.set_align(unsafe { std::mem::transmute(5)});
+    let mut projects_folder = Input::new(15, 29, 420, 24, None);
+    projects_folder.set_label(r#"track ALL projects in this folder:"#);
+    projects_folder.set_align(unsafe { std::mem::transmute(5)});
     let mut api_key = Input::new(15, 74, 420, 24, None);
-    api_key.set_label(r#"hey, what's your WakaTime API key?"#);
+    api_key.set_label(r#"WakaTime API key:"#);
     api_key.set_align(unsafe {std::mem::transmute(5)});
     let mut server_url = InputChoice::new(16, 118, 420, 24, None);
-    server_url.set_label(r#"what server do you want to connect to?"#);
+    server_url.set_label(r#"WakaTime API url:"#);
     server_url.set_align(unsafe {std::mem::transmute(5)});
     server_url.add("https:\\/\\/api.wakatime.com\\/api\\/v1");
     server_url.add("https:\\/\\/waka.hackclub.com\\/api");
@@ -102,7 +102,7 @@ impl Ui {
     settings_window.end();
     let settings_window_ui = SettingsWindowUi {
       settings_window,
-      kicad_project,
+      projects_folder,
       api_key,
       server_url,
       ok_button,

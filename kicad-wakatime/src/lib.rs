@@ -96,6 +96,8 @@ impl<'a> Plugin {
       debug!("board_ds = {:?}", board_ds.clone());
       self.set_current_file_from_document_specifier(board_ds.clone())?;
       self.set_many_items()?;
+    } else {
+      debug!("{:?}", w.title);
     }
     Ok(())
   }
@@ -204,13 +206,13 @@ impl<'a> Plugin {
       None => String::new(),
     }
   }
-  pub fn set_kicad_project(&mut self, kicad_project: String) {
+  pub fn set_projects_folder(&mut self, projects_folder: String) {
     self.kicad_wakatime_config.with_section(Some("settings"))
-      .set("kicad_project", kicad_project);
+      .set("projects_folder", projects_folder);
   }
-  pub fn get_kicad_project(&mut self) -> PathBuf {
-    match self.kicad_wakatime_config.with_section(Some("settings")).get("kicad_project") {
-      Some(kicad_project) => PathBuf::from(kicad_project),
+  pub fn get_projects_folder(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("projects_folder") {
+      Some(projects_folder) => PathBuf::from(projects_folder),
       None => PathBuf::new(),
     }
   }
@@ -334,7 +336,7 @@ impl<'a> Plugin {
         self.store_config();
       },
       Some(Message::UpdateSettings) => {
-        self.set_kicad_project(self.ui.settings_window_ui.kicad_project.value());
+        self.set_projects_folder(self.ui.settings_window_ui.projects_folder.value());
         self.set_api_key(self.ui.settings_window_ui.api_key.value());
         self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
         self.store_config();
@@ -513,7 +515,7 @@ impl<'a> Plugin {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
     home_dir.join(".wakatime")
   }
-  /// Return the file stem of the WakaTime CLI for the current OS and architecture.
+  /// Return the file stem of the WakaTime CLI executable for the current OS and architecture.
   pub fn cli_name(&self, consts: (&'static str, &'static str)) -> String {
     let (os, arch) = consts;
     match os {
@@ -525,7 +527,7 @@ impl<'a> Plugin {
   pub fn cli_zip_name(&self, consts: (&'static str, &'static str)) -> String {
     format!("{}.zip", self.cli_name(consts))
   }
-  /// Return the file name of the WakaTime CLI for the current OS and architecture.
+  /// Return the file name of the WakaTime CLI executable for the current OS and architecture.
   pub fn cli_exe_name(&self, consts: (&'static str, &'static str)) -> String {
     let (os, _arch) = consts;
     let cli_name = self.cli_name(consts);
