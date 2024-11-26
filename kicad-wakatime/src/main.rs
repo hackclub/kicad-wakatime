@@ -66,10 +66,18 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.settings_window_ui.api_key.set_value(api_key.as_str());
   plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
 
-  plugin.watch_files(PathBuf::from(projects_folder));
+  plugin.watch_files(PathBuf::from(projects_folder.clone()));
 
   fltk::app::add_idle3(move |_| {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    let projects_folder = plugin.get_projects_folder();
+    let api_key = plugin.get_api_key();
+    let api_url = plugin.get_api_url();
+    if projects_folder == PathBuf::new() || api_key == String::new() || api_url == String::new() {
+      plugin.ui.main_window_ui.status_box.set_value("need settings!");
+    } else {
+      plugin.ui.main_window_ui.status_box.set_value("OK");
+    }
     if plugin.kicad.is_some() && sys.find_process("kicad").is_none() {
       plugin.dual_warn(String::from("Lost connection to KiCAD!"));
       plugin.kicad = None;
