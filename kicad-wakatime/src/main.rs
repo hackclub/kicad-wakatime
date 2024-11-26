@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
@@ -62,6 +64,8 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.ui.settings_window_ui.projects_folder.set_value(projects_folder.to_str().unwrap());
   plugin.ui.settings_window_ui.api_key.set_value(api_key.as_str());
   plugin.ui.settings_window_ui.server_url.set_value(api_url.as_str());
+
+  plugin.watch_files(PathBuf::from(projects_folder));
 
   fltk::app::add_idle3(move |_| {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);

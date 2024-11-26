@@ -16,6 +16,7 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
+use notify::event::ModifyKind;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 
 pub mod ui;
@@ -252,6 +253,24 @@ impl<'a> Plugin {
   pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {
     self.full_paths.get(&filename)
   }
+  pub fn recursively_add_full_paths(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
+    for path in fs::read_dir(path)? {
+      let path = path.unwrap().path();
+      if path.is_dir() { self.recursively_add_full_paths(path.clone()); };
+      if !path.is_file() { continue; };
+      let file_name = path.file_name().unwrap().to_str().unwrap();
+      // let file_stem = path.file_stem().unwrap().to_str().unwrap();
+      let Some(file_extension) = path.extension() else { continue; };
+      let file_extension = file_extension.to_str().unwrap();
+      if file_extension == "kicad_sch" || file_extension == "kicad_pcb" {
+        self.full_paths.insert(
+          file_name.to_string(),
+        path
+        );
+      }
+    }
+    Ok(())
+  }
   pub fn get_filename_from_document_specifier(
     &self,
     specifier: &DocumentSpecifier,
@@ -315,8 +334,6 @@ impl<'a> Plugin {
       }
       debug!("filename = {:?}", self.filename.clone());
       debug!("full_path = {:?}", self.full_path.clone());
-      // also begin watching the focused file for changes
-      self.watch_file(self.get_full_path(filename.clone()).unwrap().to_path_buf())?;
     } else {
       debug!("Focused file did not change!")
     }
@@ -326,22 +343,29 @@ impl<'a> Plugin {
     self.file_watcher = Some(notify::recommended_watcher(self.tx.clone().unwrap())?);
     Ok(())
   }
-  pub fn watch_file(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
+  pub fn watch_files(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
+    if path == PathBuf::from("") {
+      return Ok(())
+    }
     self.create_file_watcher()?;
-    self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::NonRecursive).unwrap();
+    self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::Recursive).unwrap();
     self.dual_info(format!("Watcher set up to watch {:?} for changes", path));
+    // add to full_paths
+    self.recursively_add_full_paths(path);
+    debug!("full_paths = {:?}", self.full_paths);
     Ok(())
   }
   pub fn try_recv(&mut self) -> Result<(), anyhow::Error> {
     let Some(ref rx) = self.rx else { unreachable!(); };
     let recv = rx.try_recv();
     if recv.is_ok() { // watched file was saved
-      // skip duplicate
-      // TODO: use debouncer instead
-      let _ = rx.try_recv();
-      // TODO: variant check?
-      self.dual_info(String::from("File saved!"));
-      self.maybe_send_heartbeat(self.filename.clone(), true)?;
+      if let Ok(Ok(notify::Event { kind, paths, attrs })) = recv {
+        if !paths.contains(&self.full_path) {
+          return Ok(())
+        }
+        self.dual_info(String::from("File saved!"));
+        self.maybe_send_heartbeat(self.filename.clone(), true)?;
+      }
     }
     Ok(())
   }
@@ -358,6 +382,7 @@ impl<'a> Plugin {
         self.set_projects_folder(self.ui.settings_window_ui.projects_folder.value());
         self.set_api_key(self.ui.settings_window_ui.api_key.value());
         self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
+        self.watch_files(PathBuf::from(self.ui.settings_window_ui.projects_folder.value()));
         self.store_config();
       }
       None => {},
@@ -462,6 +487,11 @@ impl<'a> Plugin {
     } else {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
+    // TODO: ????
+    if self.time_passed() < Duration::from_millis(100) {
+      debug!("Not sending heartbeat (too fast!)");
+      return Ok(())
+    }
     if is_file_saved ||
     self.enough_time_passed() ||
     self.filename != filename {
@@ -476,6 +506,8 @@ impl<'a> Plugin {
     self.dual_info(String::from("Sending heartbeat..."));
     if self.disable_heartbeats {
       self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
+      self.dual_warn(String::from("Updating last_sent_time anyway"));
+      self.last_sent_time = self.current_time();
       return Ok(())
     }
     let full_path = self.full_path.clone();
