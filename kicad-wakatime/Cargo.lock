@@ -886,12 +886,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmk"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fd5de2a10e31b3ec3e8d75e7ccf8281ab3ee55de68f7ab6ffa9e21be8d82f22"
-
-[[package]]
 name = "codespan-reporting"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1101,15 +1095,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "crossbeam-channel"
-version = "0.5.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
-dependencies = [
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -1542,30 +1527,6 @@ checksum = "c936bfdafb507ebbf50b8074c54fa31c5be9a1e7e5f467dd659697041407d07c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
-]
-
-[[package]]
-name = "fltk"
-version = "1.4.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3425eb42cd32d91ecacb9a51abce5eadb95805bc2a5bd0865af296d9c567e55"
-dependencies = [
- "bitflags 2.6.0",
- "crossbeam-channel",
- "fltk-sys",
- "once_cell",
- "paste",
- "ttf-parser",
-]
-
-[[package]]
-name = "fltk-sys"
-version = "1.4.36"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6064d919361d236997a98584263cb645d17beff0dd15b151f9bbfd19ddc4d37"
-dependencies = [
- "cmake",
- "cmk",
 ]
 
 [[package]]
@@ -2465,7 +2426,6 @@ dependencies = [
  "core-graphics 0.24.0",
  "eframe",
  "egui_logger",
- "fltk",
  "home",
  "kicad-api-rs",
  "log",

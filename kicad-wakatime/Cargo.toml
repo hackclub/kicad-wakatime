@@ -14,7 +14,6 @@ chrono = "0.4.38"
 clap = { version = "4.5.21", features = ["derive"] }
 eframe = "0.29.1"
 egui_logger = "0.6.1"
-fltk = "1.4.36"
 home = "0.5.9"
 # kicad-api-rs = "0.0.1"
 kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
