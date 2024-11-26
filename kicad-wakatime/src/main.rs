@@ -52,6 +52,7 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
   plugin.check_cli_installed(args.redownload)?;
+  plugin.check_up_to_date()?;
   plugin.load_config();
   plugin.connect_to_kicad()?;
 

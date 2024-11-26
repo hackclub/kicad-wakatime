@@ -16,7 +16,6 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
-use notify::event::ModifyKind;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 
 pub mod ui;
@@ -130,7 +129,35 @@ impl<'a> Plugin {
     }
     Ok(())
   }
+  pub fn check_up_to_date(&mut self) -> Result<(), anyhow::Error> {
+    let client = reqwest::blocking::Client::new();
+    // need to insert some kind of user agent to avoid getting 403 forbidden
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("user-agent", "kicad-wakatime/1.0".parse().unwrap());
+    let res = client.get("https://api.github.com/repos/hackclub/kicad-wakatime/releases/latest")
+      .headers(headers)
+      .send()
+      .expect("Could not make request!");
+    let json = res.json::<serde_json::Value>().unwrap();
+    // sanity check
+    if let serde_json::Value::String(message) = &json["message"] {
+      if message == &String::from("Not Found") {
+        self.dual_warn(String::from("No kicad-wakatime releases found!"));
+        return Ok(())
+      }
+    }
+    let name = json["name"]
+      .as_str()
+      .unwrap()
+      .to_string();
+    if name != PLUGIN_VERSION {
+      self.dual_info(String::from("kicad-wakatime update available!"));
+      self.dual_info(String::from("Visit https://github.com/hackclub/kicad-wakatime to download it"));
+    }
+    Ok(())
+  }
   pub fn get_latest_release(&mut self) -> Result<(), anyhow::Error> {
+    // TODO: share
     let client = reqwest::blocking::Client::new();
     // need to insert some kind of user agent to avoid getting 403 forbidden
     let mut headers = reqwest::header::HeaderMap::new();
