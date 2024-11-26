@@ -6,7 +6,7 @@
 
 On all platforms:
 1. Download the latest release of kicad-wakatime from the releases section.
-2. Enable the KiCAD API in KiCAD 8.99. (Settings -> Plugins -> KiCAD API)
+2. Enable the KiCAD API in KiCAD 8.99. (Settings -> Plugins -> Enable KiCAD API)
 3. Open kicad-wakatime and fill out the settings.
 4. Start designing!
 
@@ -31,4 +31,4 @@ If kicad-wakatime is not doing what you expect, please [open an issue](https://g
 The bug report template will ask you for a magic word to confirm that you've read this README.\
 The magic word is **"dreadnought"**.
 
-Please make sure you're running KiCAD 8.99 (**not** KiCAD 8.0!) and the API server is enabled.
+Please make sure you're running KiCAD 8.99 (**not** KiCAD 8.0!) and the KiCAD API is enabled.
