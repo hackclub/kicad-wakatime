@@ -6,8 +6,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
-use chrono::Local;
-use fltk::prelude::*;
+use chrono::{DateTime, Local, TimeZone, Utc};
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
@@ -21,16 +20,17 @@ use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 pub mod ui;
 pub mod traits;
 
-use ui::{Message, Ui};
+// use ui::{Message, Ui};
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
+  pub redownload: bool,
   pub wakatime_config: Ini,
   pub kicad_wakatime_config: Ini,
-  pub ui: Ui,
+  // pub ui: ui::App,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -48,20 +48,24 @@ pub struct Plugin {
   pub time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
+  pub last_sent_time_chrono: Option<DateTime<Local>>,
   // the last file that was sent
   pub last_sent_file: String,
+  pub first_iteration_finished: bool,
 }
 
 impl<'a> Plugin {
   pub fn new(
     disable_heartbeats: bool,
+    redownload: bool,
   ) -> Self {
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
+      redownload,
       wakatime_config: Ini::default(),
       kicad_wakatime_config: Ini::default(),
-      ui: Ui::new(),
+      // ui: ui::App::default(),
       tx: None,
       rx: None,
       kicad: None,
@@ -73,10 +77,20 @@ impl<'a> Plugin {
       items: HashMap::default(),
       time: Duration::default(),
       last_sent_time: Duration::default(),
+      last_sent_time_chrono: None,
       last_sent_file: String::default(),
+      first_iteration_finished: false,
     }
   }
   pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
+    if !self.first_iteration_finished {
+      self.check_cli_installed(self.redownload)?;
+      self.check_up_to_date()?;
+      self.load_config();
+      // self.connect_to_kicad()?;
+      let projects_folder = self.get_projects_folder();
+      self.watch_files(PathBuf::from(projects_folder.clone()))?;
+    }
     self.set_current_time(self.current_time());
     let Ok(w) = self.get_active_window() else { return Ok(()); };
     let Some(ref k) = self.kicad else { return Ok(()); };
@@ -86,19 +100,20 @@ impl<'a> Plugin {
       // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
       // modification without save cannot be sent
       let schematic_ds = schematic.doc;
-      debug!("schematic_ds = {:?}", schematic_ds.clone());
+      // debug!("schematic_ds = {:?}", schematic_ds.clone());
       self.set_current_file_from_document_specifier(schematic_ds.clone())?;
     }
     else if w.title.contains("PCB Editor") {
       // for the PCB editor, we can instead use the Rust bindings proper
       let board = k.get_open_board()?;
       let board_ds = board.doc;
-      debug!("board_ds = {:?}", board_ds.clone());
+      // debug!("board_ds = {:?}", board_ds.clone());
       self.set_current_file_from_document_specifier(board_ds.clone())?;
       self.set_many_items()?;
     } else {
       // debug!("{:?}", w.title);
     }
+    self.first_iteration_finished = true;
     Ok(())
   }
   pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
@@ -309,7 +324,7 @@ impl<'a> Plugin {
     &mut self,
     specifier: DocumentSpecifier,
   ) -> Result<(), anyhow::Error> {
-    debug!("Updating current file...");
+    // debug!("Updating current file...");
     // filename
     // TODO: other variants
     let filename = self.get_filename_from_document_specifier(&specifier);
@@ -359,10 +374,10 @@ impl<'a> Plugin {
         self.filename = filename.clone();
         self.full_path = full_path.clone();
       }
-      debug!("filename = {:?}", self.filename.clone());
-      debug!("full_path = {:?}", self.full_path.clone());
+      // debug!("filename = {:?}", self.filename.clone());
+      // debug!("full_path = {:?}", self.full_path.clone());
     } else {
-      debug!("Focused file did not change!")
+      // debug!("Focused file did not change!")
     }
     Ok(())
   }
@@ -396,25 +411,25 @@ impl<'a> Plugin {
     }
     Ok(())
   }
-  pub fn try_ui_recv(&mut self) {
-    match self.ui.receiver.recv() {
-      Some(Message::OpenSettingsWindow) => {
-        self.ui.settings_window_ui.settings_window.show();
-      },
-      Some(Message::CloseSettingsWindow) => {
-        self.ui.settings_window_ui.settings_window.hide();
-        self.store_config();
-      },
-      Some(Message::UpdateSettings) => {
-        self.set_projects_folder(self.ui.settings_window_ui.projects_folder.value());
-        self.set_api_key(self.ui.settings_window_ui.api_key.value());
-        self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
-        self.watch_files(PathBuf::from(self.ui.settings_window_ui.projects_folder.value()));
-        self.store_config();
-      }
-      None => {},
-    }
-  }
+  // pub fn try_ui_recv(&mut self) {
+  //   match self.ui.receiver.recv() {
+  //     Some(Message::OpenSettingsWindow) => {
+  //       self.ui.settings_window_ui.settings_window.show();
+  //     },
+  //     Some(Message::CloseSettingsWindow) => {
+  //       self.ui.settings_window_ui.settings_window.hide();
+  //       self.store_config();
+  //     },
+  //     Some(Message::UpdateSettings) => {
+  //       self.set_projects_folder(self.ui.settings_window_ui.projects_folder.value());
+  //       self.set_api_key(self.ui.settings_window_ui.api_key.value());
+  //       self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
+  //       self.watch_files(PathBuf::from(self.ui.settings_window_ui.projects_folder.value()));
+  //       self.store_config();
+  //     }
+  //     None => {},
+  //   }
+  // }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
   }
@@ -432,7 +447,7 @@ impl<'a> Plugin {
   }
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
-    debug!("Updating board items...");
+    // debug!("Updating board items...");
     let Some(ref k) = self.kicad else { return Ok(()) };
     let board = k.get_open_board()?;
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
@@ -497,7 +512,7 @@ impl<'a> Plugin {
       // since the items changed, it might be time to send a heartbeat
       self.maybe_send_heartbeat(self.filename.clone(), false)?;
     } else {
-      debug!("Board items did not change!");
+      // debug!("Board items did not change!");
     }
     Ok(())
   }
@@ -535,6 +550,7 @@ impl<'a> Plugin {
       self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
       self.dual_warn(String::from("Updating last_sent_time anyway"));
       self.last_sent_time = self.current_time();
+      self.last_sent_time_chrono = Some(Local::now());
       return Ok(())
     }
     let full_path = self.full_path.clone();
@@ -576,12 +592,10 @@ impl<'a> Plugin {
     // heartbeat should have been sent at this point
     self.dual_info(String::from("Finished!"));
     self.last_sent_time = self.current_time();
+    self.last_sent_time_chrono = Some(Local::now());
     self.last_sent_file = full_path_string;
     debug!("last_sent_time = {:?}", self.last_sent_time);
     debug!("last_sent_file = {:?}", self.last_sent_file);
-    // update UI
-    let formatted_time = Local::now().format("%H:%M:%S");
-    self.ui.main_window_ui.last_heartbeat_box.set_value(format!("{formatted_time}").as_str());
     Ok(())
   }
   /// Return the path to the .wakatime.cfg file.
@@ -633,15 +647,15 @@ impl<'a> Plugin {
   }
   pub fn dual_info(&mut self, s: String) {
     info!("{}", s);
-    self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
+    // self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_warn(&mut self, s: String) {
     warn!("{}", s);
-    self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
+    // self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_error(&mut self, s: String) {
     error!("{}", s);
-    self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
+    // self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
 }
 
