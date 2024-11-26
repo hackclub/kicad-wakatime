@@ -515,7 +515,7 @@ impl<'a> Plugin {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
     // TODO: ????
-    if self.time_passed() < Duration::from_millis(100) {
+    if self.time_passed() < Duration::from_millis(1000) {
       debug!("Not sending heartbeat (too fast!)");
       return Ok(())
     }
