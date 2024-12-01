@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, Local};
 use ini::Ini;
 use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
@@ -92,8 +92,14 @@ impl<'a> Plugin {
       self.watch_files(PathBuf::from(projects_folder.clone()))?;
     }
     self.set_current_time(self.current_time());
-    let Ok(w) = self.get_active_window() else { return Ok(()); };
-    let Some(ref k) = self.kicad else { return Ok(()); };
+    let Ok(w) = self.get_active_window() else {
+      self.first_iteration_finished = true;
+      return Ok(());
+    };
+    let Some(ref k) = self.kicad else {
+      self.first_iteration_finished = true;
+      return Ok(());
+    };
     if w.title.contains("Schematic Editor") {
       let schematic = k.get_open_schematic()?;
       // the KiCAD IPC API does not work properly with schematics as of November 2024
@@ -411,25 +417,6 @@ impl<'a> Plugin {
     }
     Ok(())
   }
-  // pub fn try_ui_recv(&mut self) {
-  //   match self.ui.receiver.recv() {
-  //     Some(Message::OpenSettingsWindow) => {
-  //       self.ui.settings_window_ui.settings_window.show();
-  //     },
-  //     Some(Message::CloseSettingsWindow) => {
-  //       self.ui.settings_window_ui.settings_window.hide();
-  //       self.store_config();
-  //     },
-  //     Some(Message::UpdateSettings) => {
-  //       self.set_projects_folder(self.ui.settings_window_ui.projects_folder.value());
-  //       self.set_api_key(self.ui.settings_window_ui.api_key.value());
-  //       self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
-  //       self.watch_files(PathBuf::from(self.ui.settings_window_ui.projects_folder.value()));
-  //       self.store_config();
-  //     }
-  //     None => {},
-  //   }
-  // }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
   }
