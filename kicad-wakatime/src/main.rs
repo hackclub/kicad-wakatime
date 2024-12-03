@@ -75,6 +75,7 @@ fn main() -> Result<(), anyhow::Error> {
           plugin.dual_error(format!("{:?}", e));
         }
       };
+      ctx.request_repaint();
     }
   );
 
