@@ -7,8 +7,9 @@
 On all platforms:
 1. Download the latest release of kicad-wakatime from the releases section.
 2. Enable the KiCAD API in KiCAD 8.99. (Settings -> Plugins -> Enable KiCAD API)
-3. Open kicad-wakatime and fill out the settings.
-4. Start designing!
+3. Enable the KiCAD Auto-save KiCAD 8.99. (Settings -> Commons -> Autosave (1min))
+4. Open kicad-wakatime and fill out the settings.
+5. Start designing!
 
 ## Downloading KiCAD 8.99
 
