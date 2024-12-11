@@ -451,7 +451,7 @@ impl<'a> Plugin {
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
     // debug!("Updating board items...");
     let Some(ref k) = self.kicad else { return Ok(()) };
-    let board = k.get_open_board()?;
+    let Ok(board) = k.get_open_board() else { return Ok(()) };
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
     let objects = board.get_items(&[
       KiCadObjectType::KOT_PCB_ARC,
