@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
 use chrono::{DateTime, Local};
 use ini::Ini;
+use kicad::KiCadError;
 use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
@@ -332,6 +333,7 @@ impl<'a> Plugin {
     &self,
     specifier: &DocumentSpecifier,
   ) -> String {
+    // TODO: other variants
     let Some(Identifier::BoardFilename(ref filename)) = specifier.identifier else { unreachable!(); };
     filename.to_string()
   }
@@ -339,9 +341,7 @@ impl<'a> Plugin {
     &mut self,
     specifier: DocumentSpecifier,
   ) -> Result<(), anyhow::Error> {
-    // debug!("Updating current file...");
     // filename
-    // TODO: other variants
     let filename = self.get_filename_from_document_specifier(&specifier);
     // full path
     let project = specifier.project.0;
@@ -447,53 +447,30 @@ impl<'a> Plugin {
     let Some(ref k) = self.kicad else { return Ok(()) };
     let board = k.get_open_board()?;
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    // TODO: write cooler function
-    let mut attempts = 0;
-    let tracks = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get tracks! (10 tries)"));
+    let objects = board.get_items(&[
+      KiCadObjectType::KOT_PCB_ARC,
+      KiCadObjectType::KOT_PCB_FOOTPRINT,
+      KiCadObjectType::KOT_PCB_PAD,
+      KiCadObjectType::KOT_PCB_TRACE,
+      KiCadObjectType::KOT_PCB_VIA,
+    ]);
+    // when some objects are selected, KiCAD will return this error instead of
+    // returning the objects.
+    // because set_many_items is called so much, KiCAD finds its way eventually,
+    // and this error can be safely ignored.
+    if let Err(KiCadError::ApiError(ref e)) = objects {
+      if e.eq(&String::from("KiCad API returned error: KiCad is busy and cannot respond to API requests right now")) {
         return Ok(())
-      };
-      if let Ok(tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) { break tracks; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let arc_tracks = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get arc tracks! (10 tries)"));
-        return Ok(())
-      };
-      // TODO: is this the right variant?
-      if let Ok(arc_tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) { break arc_tracks; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let vias = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get vias! (10 tries)"));
-        return Ok(())
-      };
-      if let Ok(vias) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) { break vias; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let footprint_instances = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get footprint instances! (10 tries)"));
-        return Ok(())
-      };
-      if let Ok(footprint_instances) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) { break footprint_instances; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let pads = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get pads! (10 tries)"));
-        return Ok(())
-      };
-      if let Ok(pads) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) { break pads; }
-      attempts += 1;
-    };
+      }
+    }
+    // propagate any other types of errors with ?.
+    let objects = objects?;
+    // type split
+    let arc_tracks = objects.iter().cloned().filter(|o| o.is_arc_track()).collect();
+    let footprint_instances = objects.iter().cloned().filter(|o| o.is_footprint_instance()).collect();
+    let pads = objects.iter().cloned().filter(|o| o.is_pad()).collect();
+    let tracks = objects.iter().cloned().filter(|o| o.is_track()).collect();
+    let vias = objects.iter().cloned().filter(|o| o.is_via()).collect();
     items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);

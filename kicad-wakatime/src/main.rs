@@ -85,8 +85,5 @@ fn main() -> Result<(), anyhow::Error> {
     }
   );
 
-  // fltk::app::add_idle3(move |_| {
-  // });
-
   Ok(())
 }
