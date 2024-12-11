@@ -95,8 +95,7 @@ impl<'a> Plugin {
   pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
     if !self.first_iteration_finished {
       self.check_cli_installed(self.redownload)?;
-      // TODO: lower frequency before uncommenting this line
-      // self.check_up_to_date()?;
+      self.check_up_to_date()?;
       // self.connect_to_kicad()?;
       let projects_folder = self.get_projects_folder();
       self.watch_files(PathBuf::from(projects_folder.clone()))?;
