@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use eframe::egui::{self};
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
