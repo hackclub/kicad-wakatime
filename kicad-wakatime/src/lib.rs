@@ -319,13 +319,19 @@ impl<'a> Plugin {
   pub fn recursively_add_full_paths(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
     for path in fs::read_dir(path)? {
       let path = path.unwrap().path();
-      if path.is_dir() { self.recursively_add_full_paths(path.clone()); };
+      if path.is_dir() { self.recursively_add_full_paths(path.clone())?; };
       if !path.is_file() { continue; };
       let file_name = path.file_name().unwrap().to_str().unwrap();
       // let file_stem = path.file_stem().unwrap().to_str().unwrap();
       let Some(file_extension) = path.extension() else { continue; };
       let file_extension = file_extension.to_str().unwrap();
       if file_extension == "kicad_sch" || file_extension == "kicad_pcb" {
+        if self.full_paths.contains_key(file_name) {
+          self.dual_error(format!("Found multiple files named {file_name} in the projects folder!"));
+          self.dual_error(format!("Please select a folder that only contains one file named {file_name}!"));
+          self.full_paths = HashMap::new();
+          return Ok(())
+        }
         self.full_paths.insert(
           file_name.to_string(),
         path
@@ -346,41 +352,8 @@ impl<'a> Plugin {
     &mut self,
     specifier: DocumentSpecifier,
   ) -> Result<(), anyhow::Error> {
-    // filename
     let filename = self.get_filename_from_document_specifier(&specifier);
-    // full path
-    let project = specifier.project.0;
-    let full_path = match project {
-      // in the PCB editor, the specifier's project field is populated
-      Some(project) => {
-        let full_path = PathBuf::from(project.path).join(filename.clone());
-        let file_stem = full_path.file_stem().unwrap().to_str().unwrap();
-        self.full_paths.insert(
-          format!("{file_stem}.kicad_sch"),
-          full_path.parent().unwrap().join(format!("{file_stem}.kicad_sch"))
-        );
-        self.full_paths.insert(
-          format!("{file_stem}.kicad_pcb"),
-          full_path.parent().unwrap().join(format!("{file_stem}.kicad_pcb"))
-        );
-        full_path
-      },
-      // in the schematic editor, the specifier's project field is not populated.
-      // ask the user to switch to the PCB editor for this schematic so that the
-      // full path can be stored
-      None => {
-        if self.get_full_path(filename.clone()).is_none() {
-          if !self.warned_filenames.contains(&filename) {
-            self.dual_warn(format!("Schematic \"{}\" cannot be tracked yet!", filename.clone()));
-            self.dual_warn(String::from("Please switch to the PCB editor first!"));
-            self.dual_warn(String::from("You can then track time spent in both the schematic editor and PCB editor for this project"));
-            self.warned_filenames.push(filename.clone());
-          }
-          return Ok(())
-        }
-        self.get_full_path(filename.clone()).unwrap().to_path_buf()
-      }
-    };
+    let full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
     if self.filename != filename {
       self.dual_info(String::from("Focused file changed!"));
       // since the focused file changed, it might be time to send a heartbeat.
@@ -409,11 +382,11 @@ impl<'a> Plugin {
     if path == PathBuf::from("") {
       return Ok(())
     }
+    self.dual_info(format!("Watching {:?} for changes", path));
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::Recursive).unwrap();
-    self.dual_info(format!("Watcher set up to watch {:?} for changes", path));
-    // add to full_paths
-    self.recursively_add_full_paths(path);
+    self.full_paths = HashMap::new();
+    self.recursively_add_full_paths(path.clone())?;
     debug!("full_paths = {:?}", self.full_paths);
     Ok(())
   }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use eframe::egui::{self, Color32, RichText, TextEdit};
 use egui_modal::Modal;
 use log::debug;
@@ -31,10 +33,10 @@ impl Ui for Plugin {
       ui.add_space(10.0);
       ui.label("track ALL projects in this folder:");
       // ui.text_edit_singleline(&mut self.watched_folder);
-      ui.monospace(format!("{:?}", projects_folder));
+      ui.monospace(format!("{:?}", self.projects_folder));
       if ui.button("select folder").clicked() {
         if let Some(path) = rfd::FileDialog::new().pick_folder() {
-          debug!("{:?}", path);
+          self.projects_folder = path.to_str().unwrap().to_string();
         }
       }
       ui.label("API key:");
@@ -46,6 +48,7 @@ impl Ui for Plugin {
         self.set_api_key(self.api_key.clone());
         self.set_api_url(self.api_url.clone());
         self.store_config();
+        self.watch_files(PathBuf::from(self.projects_folder.clone()));
         modal.close();
       }
     });
