@@ -2433,7 +2433,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 [[package]]
 name = "kicad-api-rs"
 version = "0.0.1"
-source = "git+https://gitlab.com/sporeball/kicad-rs.git#dd4948ddb38985ca9b7dbd013f8c788bb6a1646b"
+source = "git+https://gitlab.com/sporeball/kicad-rs.git#99f807033c6efa274973998a101c4bcb5ccb4464"
 dependencies = [
  "enum-as-inner",
  "nng",
@@ -2468,6 +2468,7 @@ dependencies = [
  "kicad-api-rs",
  "log",
  "mouse_position",
+ "nng",
  "notify",
  "reqwest",
  "rfd",

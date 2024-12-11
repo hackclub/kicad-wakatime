@@ -20,6 +20,7 @@ home = "0.5.9"
 kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
 mouse_position = "0.1.4"
+nng = "1.0.1"
 notify = "7.0.0"
 reqwest = { version = "0.12.9", features = ["blocking", "json"] }
 rfd = "0.15.1"

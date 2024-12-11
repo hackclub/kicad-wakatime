@@ -16,6 +16,7 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
+use nng::options::{Options, SendTimeout, RecvTimeout};
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 
 pub mod ui;
@@ -301,7 +302,10 @@ impl<'a> Plugin {
       ..Default::default()
     }).ok();
     if k.is_some() {
-      self.kicad = k;
+      let k = k.unwrap();
+      k.socket.set_opt::<SendTimeout>(Some(std::time::Duration::from_millis(1000)))?;
+      k.socket.set_opt::<RecvTimeout>(Some(std::time::Duration::from_millis(1000)))?;
+      self.kicad = Some(k);
       self.dual_info(format!("Connected to KiCAD!"));
     } else {
       self.dual_error(String::from("Could not connect to KiCAD!"));
