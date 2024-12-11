@@ -110,21 +110,23 @@ impl<'a> Plugin {
       return Ok(());
     };
     if w.title.contains("Schematic Editor") {
-      let schematic = k.get_open_schematic()?;
-      // the KiCAD IPC API does not work properly with schematics as of November 2024
-      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
-      // modification without save cannot be sent
-      let schematic_ds = schematic.doc;
-      // debug!("schematic_ds = {:?}", schematic_ds.clone());
-      self.set_current_file_from_document_specifier(schematic_ds.clone())?;
+      if let Ok(schematic) = k.get_open_schematic() {
+        // the KiCAD IPC API does not work properly with schematics as of November 2024
+        // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
+        // modification without save cannot be sent
+        let schematic_ds = schematic.doc;
+        // debug!("schematic_ds = {:?}", schematic_ds.clone());
+        self.set_current_file_from_document_specifier(schematic_ds.clone())?;
+      }
     }
     else if w.title.contains("PCB Editor") {
-      // for the PCB editor, we can instead use the Rust bindings proper
-      let board = k.get_open_board()?;
-      let board_ds = board.doc;
-      // debug!("board_ds = {:?}", board_ds.clone());
-      self.set_current_file_from_document_specifier(board_ds.clone())?;
-      self.set_many_items()?;
+      if let Ok(board) = k.get_open_board() {
+        // for the PCB editor, we can instead use the Rust bindings proper
+        let board_ds = board.doc;
+        // debug!("board_ds = {:?}", board_ds.clone());
+        self.set_current_file_from_document_specifier(board_ds.clone())?;
+        self.set_many_items()?;
+      }
     } else {
       // debug!("{:?}", w.title);
     }
