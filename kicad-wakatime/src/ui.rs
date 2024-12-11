@@ -1,30 +1,6 @@
-//     // settings window
-//     let mut settings_window = Window::new(516, 350, 456, 195, None);
-//     settings_window.make_modal(true);
-//     settings_window.set_label(r#"kicad-wakatime settings ^w^"#);
-//     settings_window.set_type(WindowType::Double);
-//     let mut projects_folder = Input::new(15, 29, 420, 24, None);
-//     projects_folder.set_label(r#"track ALL projects in this folder:"#);
-//     projects_folder.set_align(unsafe { std::mem::transmute(5)});
-//     let mut api_key = Input::new(15, 74, 420, 24, None);
-//     api_key.set_label(r#"WakaTime API key:"#);
-//     api_key.set_align(unsafe {std::mem::transmute(5)});
-//     let mut server_url = InputChoice::new(16, 118, 420, 24, None);
-//     server_url.set_label(r#"WakaTime API url:"#);
-//     server_url.set_align(unsafe {std::mem::transmute(5)});
-//     server_url.add("https:\\/\\/api.wakatime.com\\/api\\/v1");
-//     server_url.add("https:\\/\\/waka.hackclub.com\\/api");
-//     let mut ok_button = ReturnButton::new(349, 157, 86, 22, None);
-//     ok_button.set_label(r#"okay!"#);
-//     ok_button.set_callback(move |_| {
-//       sender.send(Message::UpdateSettings);
-//       sender.send(Message::CloseSettingsWindow);
-//     });
-//     settings_window.end();
-//   }
-// }
-
-use eframe::egui::{self, Color32};
+use eframe::egui::{self, Color32, RichText, TextEdit};
+use egui_modal::Modal;
+use log::debug;
 
 use crate::Plugin;
 
@@ -48,10 +24,39 @@ impl Ui for Plugin {
       Some(dt) => dt.format("%H:%M:%S").to_string(),
       None => String::from("N/A"),
     };
+    // settings window
+    let modal = Modal::new(ctx, "settings");
+    modal.show(|ui| {
+      ui.label(RichText::new("kicad-wakatime settings ^w^").size(16.0));
+      ui.add_space(10.0);
+      ui.label("track ALL projects in this folder:");
+      // ui.text_edit_singleline(&mut self.watched_folder);
+      ui.monospace(format!("{:?}", projects_folder));
+      if ui.button("select folder").clicked() {
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+          debug!("{:?}", path);
+        }
+      }
+      ui.label("API key:");
+      ui.text_edit_singleline(&mut self.api_key);
+      ui.label("API URL:");
+      ui.text_edit_singleline(&mut self.api_url);
+      if ui.button("OK").clicked() {
+        self.set_projects_folder(self.projects_folder.clone());
+        self.set_api_key(self.api_key.clone());
+        self.set_api_url(self.api_url.clone());
+        self.store_config();
+        modal.close();
+      }
+    });
+    // main window
     egui::CentralPanel::default().show(ctx, |ui| {
       // ui.heading("kicad-wakatime");
       ui.label(format!("status: {status}"));
       ui.label(format!("last heartbeat: {last_heartbeat_label_text}"));
+      if ui.button("settings").clicked() {
+        modal.open();
+      }
       ui.add_space(20.0);
       ui.separator();
       egui_logger::logger_ui()

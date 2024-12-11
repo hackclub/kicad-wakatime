@@ -30,6 +30,7 @@ pub struct Plugin {
   pub redownload: bool,
   pub wakatime_config: Ini,
   pub kicad_wakatime_config: Ini,
+  pub settings_open: bool,
   // pub ui: ui::App,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
@@ -44,6 +45,9 @@ pub struct Plugin {
   pub full_paths: HashMap<String, PathBuf>,
   pub warned_filenames: Vec<String>,
   pub file_watcher: Option<RecommendedWatcher>,
+  pub projects_folder: String,
+  pub api_key: String,
+  pub api_url: String,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   pub time: Duration,
   // the last time a heartbeat was sent
@@ -65,6 +69,7 @@ impl<'a> Plugin {
       redownload,
       wakatime_config: Ini::default(),
       kicad_wakatime_config: Ini::default(),
+      settings_open: false,
       // ui: ui::App::default(),
       tx: None,
       rx: None,
@@ -74,6 +79,9 @@ impl<'a> Plugin {
       full_paths: HashMap::default(),
       warned_filenames: vec![],
       file_watcher: None,
+      projects_folder: String::default(),
+      api_key: String::default(),
+      api_url: String::default(),
       items: HashMap::default(),
       time: Duration::default(),
       last_sent_time: Duration::default(),
@@ -85,8 +93,8 @@ impl<'a> Plugin {
   pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
     if !self.first_iteration_finished {
       self.check_cli_installed(self.redownload)?;
-      self.check_up_to_date()?;
-      self.load_config();
+      // TODO: lower frequency before uncommenting this line
+      // self.check_up_to_date()?;
       // self.connect_to_kicad()?;
       let projects_folder = self.get_projects_folder();
       self.watch_files(PathBuf::from(projects_folder.clone()))?;
@@ -283,6 +291,7 @@ impl<'a> Plugin {
     }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
+    // TODO: why is this line?
     std::thread::sleep(Duration::from_millis(500));
     let k = KiCad::new(KiCadConnectionConfig {
       client_name: String::from("kicad-wakatime"),
@@ -407,7 +416,7 @@ impl<'a> Plugin {
     let Some(ref rx) = self.rx else { unreachable!(); };
     let recv = rx.try_recv();
     if recv.is_ok() { // watched file was saved
-      if let Ok(Ok(notify::Event { kind, paths, attrs })) = recv {
+      if let Ok(Ok(notify::Event { kind: _, paths, attrs: _ })) = recv {
         if !paths.contains(&self.full_path) {
           return Ok(())
         }

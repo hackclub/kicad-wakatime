@@ -46,6 +46,12 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
 
+  // settings population
+  plugin.load_config();
+  plugin.projects_folder = plugin.get_projects_folder().to_str().unwrap().to_string();
+  plugin.api_key = plugin.get_api_key();
+  plugin.api_url = plugin.get_api_url();
+
   let _ = eframe::run_simple_native(
     "kicad-wakatime ^_^",
     native_options,
