@@ -1,117 +1,71 @@
-use fltk::app::Receiver;
-use fltk::app::Sender;
-use fltk::button::*;
-use fltk::enums::*;
-use fltk::input::Input;
-use fltk::misc::InputChoice;
-use fltk::output::*;
-use fltk::prelude::*;
-use fltk::window::*;
-use fltk::group::experimental::Terminal;
+use std::path::PathBuf;
 
-#[derive(Clone, Copy, Debug)]
-pub enum Message {
-  OpenSettingsWindow,
-  CloseSettingsWindow,
-  UpdateSettings,
+use eframe::egui::{self, Color32, RichText, TextEdit};
+use egui_modal::Modal;
+use log::debug;
+
+use crate::Plugin;
+
+pub trait Ui {
+  fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame);
 }
 
-#[derive(Clone, Debug)]
-pub struct MainWindowUi {
-	pub main_window: Window,
-	pub status_box: Output,
-	// pub exit_button: Button,
-	pub log_window: Terminal,
-	pub last_heartbeat_box: Output,
-	pub settings_button: Button,
-}
-
-#[derive(Clone, Debug)]
-pub struct SettingsWindowUi {
-  pub settings_window: Window,
-  pub projects_folder: Input,
-  pub api_key: Input,
-  pub server_url: InputChoice,
-  pub ok_button: ReturnButton,
-}
-
-pub struct Ui {
-  pub sender: Sender<Message>,
-  pub receiver: Receiver<Message>,
-  pub main_window_ui: MainWindowUi,
-  pub settings_window_ui: SettingsWindowUi,
-}
-
-impl Ui {
-  pub fn new() -> Self {
-    let (sender, receiver) = fltk::app::channel::<Message>();
-    // main window
-    let mut main_window = Window::new(419, 307, 382, 260, None);
-    main_window.set_label(r#"kicad-wakatime ^_^"#);
-    main_window.set_type(WindowType::Double);
-    let mut status_box = Output::new(107, 15, 92, 22, None);
-    status_box.set_label(r#"status:"#);
-    status_box.set_frame(FrameType::NoBox);
-    status_box.clear_visible_focus();
-    // let mut exit_button = Button::new(303, 40, 64, 22, None);
-    // exit_button.set_label(r#"exit"#);
-    let mut log_window = Terminal::new(15, 85, 352, 159, None);
-    // log_window.set_label(r#"log:"#);
-    log_window.set_align(unsafe {std::mem::transmute(5)});
-    let mut last_heartbeat_box = Output::new(107, 40, 92, 22, None);
-    last_heartbeat_box.set_label(r#"last heartbeat:"#);
-    last_heartbeat_box.set_frame(FrameType::NoBox);
-    last_heartbeat_box.clear_visible_focus();
-    let mut settings_button = Button::new(303, 16, 64, 22, None);
-    settings_button.set_label(r#"settings"#);
-    settings_button.set_callback(move |_| {
-      sender.send(Message::OpenSettingsWindow);
-    });
-    main_window.end();
-    main_window.show();
-    let main_window_ui = MainWindowUi {
-      main_window,
-      status_box,
-      // exit_button,
-      log_window,
-      last_heartbeat_box,
-      settings_button,
+impl Ui for Plugin {
+  fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+    let projects_folder = self.get_projects_folder();
+    let api_key = self.get_api_key();
+    let api_url = self.get_api_url();
+    let status = if !self.first_iteration_finished {
+      "loading..."
+    } else if projects_folder.as_os_str().is_empty() || api_key.is_empty() || api_url.is_empty() {
+      "need settings!"
+    } else {
+      "OK"
+    };
+    let last_heartbeat_label_text = match self.last_sent_time_chrono {
+      Some(dt) => dt.format("%H:%M:%S").to_string(),
+      None => String::from("N/A"),
     };
     // settings window
-    let mut settings_window = Window::new(516, 350, 456, 195, None);
-    settings_window.make_modal(true);
-    settings_window.set_label(r#"kicad-wakatime settings ^w^"#);
-    settings_window.set_type(WindowType::Double);
-    let mut projects_folder = Input::new(15, 29, 420, 24, None);
-    projects_folder.set_label(r#"track ALL projects in this folder:"#);
-    projects_folder.set_align(unsafe { std::mem::transmute(5)});
-    let mut api_key = Input::new(15, 74, 420, 24, None);
-    api_key.set_label(r#"WakaTime API key:"#);
-    api_key.set_align(unsafe {std::mem::transmute(5)});
-    let mut server_url = InputChoice::new(16, 118, 420, 24, None);
-    server_url.set_label(r#"WakaTime API url:"#);
-    server_url.set_align(unsafe {std::mem::transmute(5)});
-    server_url.add("https:\\/\\/api.wakatime.com\\/api\\/v1");
-    server_url.add("https:\\/\\/waka.hackclub.com\\/api");
-    let mut ok_button = ReturnButton::new(349, 157, 86, 22, None);
-    ok_button.set_label(r#"okay!"#);
-    ok_button.set_callback(move |_| {
-      sender.send(Message::UpdateSettings);
-      sender.send(Message::CloseSettingsWindow);
+    let modal = Modal::new(ctx, "settings");
+    modal.show(|ui| {
+      ui.label(RichText::new("kicad-wakatime settings ^w^").size(16.0));
+      ui.add_space(10.0);
+      ui.label("track ALL projects in this folder:");
+      // ui.text_edit_singleline(&mut self.watched_folder);
+      ui.monospace(format!("{:?}", self.projects_folder));
+      if ui.button("select folder").clicked() {
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+          self.projects_folder = path.to_str().unwrap().to_string();
+        }
+      }
+      ui.label("API key:");
+      ui.text_edit_singleline(&mut self.api_key);
+      ui.label("API URL:");
+      ui.text_edit_singleline(&mut self.api_url);
+      if ui.button("OK").clicked() {
+        self.set_projects_folder(self.projects_folder.clone());
+        self.set_api_key(self.api_key.clone());
+        self.set_api_url(self.api_url.clone());
+        self.store_config();
+        self.watch_files(PathBuf::from(self.projects_folder.clone()));
+        modal.close();
+      }
     });
-    settings_window.end();
-    let settings_window_ui = SettingsWindowUi {
-      settings_window,
-      projects_folder,
-      api_key,
-      server_url,
-      ok_button,
-    };
-    Self {
-      sender,
-      receiver,
-      main_window_ui,
-      settings_window_ui,
-    }
+    // main window
+    egui::CentralPanel::default().show(ctx, |ui| {
+      // ui.heading("kicad-wakatime");
+      ui.label(format!("status: {status}"));
+      ui.label(format!("last heartbeat: {last_heartbeat_label_text}"));
+      if ui.button("settings").clicked() {
+        modal.open();
+      }
+      ui.add_space(20.0);
+      ui.separator();
+      egui_logger::logger_ui()
+        .warn_color(Color32::YELLOW)
+        .error_color(Color32::RED)
+        .show(ui);
+    });
   }
 }

@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
-use chrono::Local;
-use fltk::prelude::*;
+use chrono::{DateTime, Local};
 use ini::Ini;
+use kicad::KiCadError;
 use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
 use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
 use kicad::protos::enums::KiCadObjectType;
@@ -16,21 +16,24 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
+use nng::options::{Options, SendTimeout, RecvTimeout};
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 
 pub mod ui;
 pub mod traits;
 
-use ui::{Message, Ui};
+// use ui::{Message, Ui};
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct Plugin {
   pub version: &'static str,
   pub disable_heartbeats: bool,
+  pub redownload: bool,
   pub wakatime_config: Ini,
   pub kicad_wakatime_config: Ini,
-  pub ui: Ui,
+  pub settings_open: bool,
+  // pub ui: ui::App,
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
@@ -44,24 +47,32 @@ pub struct Plugin {
   pub full_paths: HashMap<String, PathBuf>,
   pub warned_filenames: Vec<String>,
   pub file_watcher: Option<RecommendedWatcher>,
+  pub projects_folder: String,
+  pub api_key: String,
+  pub api_url: String,
   pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   pub time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
+  pub last_sent_time_chrono: Option<DateTime<Local>>,
   // the last file that was sent
   pub last_sent_file: String,
+  pub first_iteration_finished: bool,
 }
 
 impl<'a> Plugin {
   pub fn new(
     disable_heartbeats: bool,
+    redownload: bool,
   ) -> Self {
     Plugin {
       version: PLUGIN_VERSION,
       disable_heartbeats,
+      redownload,
       wakatime_config: Ini::default(),
       kicad_wakatime_config: Ini::default(),
-      ui: Ui::new(),
+      settings_open: false,
+      // ui: ui::App::default(),
       tx: None,
       rx: None,
       kicad: None,
@@ -70,35 +81,56 @@ impl<'a> Plugin {
       full_paths: HashMap::default(),
       warned_filenames: vec![],
       file_watcher: None,
+      projects_folder: String::default(),
+      api_key: String::default(),
+      api_url: String::default(),
       items: HashMap::default(),
       time: Duration::default(),
       last_sent_time: Duration::default(),
+      last_sent_time_chrono: None,
       last_sent_file: String::default(),
+      first_iteration_finished: false,
     }
   }
   pub fn main_loop(&mut self) -> Result<(), anyhow::Error> {
+    if !self.first_iteration_finished {
+      self.check_up_to_date()?;
+      self.check_cli_installed(self.redownload)?;
+      // self.connect_to_kicad()?;
+      let projects_folder = self.get_projects_folder();
+      self.watch_files(PathBuf::from(projects_folder.clone()))?;
+    }
     self.set_current_time(self.current_time());
-    let Ok(w) = self.get_active_window() else { return Ok(()); };
-    let Some(ref k) = self.kicad else { return Ok(()); };
+    let Ok(w) = self.get_active_window() else {
+      self.first_iteration_finished = true;
+      return Ok(());
+    };
+    let Some(ref k) = self.kicad else {
+      self.first_iteration_finished = true;
+      return Ok(());
+    };
     if w.title.contains("Schematic Editor") {
-      let schematic = k.get_open_schematic()?;
-      // the KiCAD IPC API does not work properly with schematics as of November 2024
-      // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
-      // modification without save cannot be sent
-      let schematic_ds = schematic.doc;
-      debug!("schematic_ds = {:?}", schematic_ds.clone());
-      self.set_current_file_from_document_specifier(schematic_ds.clone())?;
+      if let Ok(schematic) = k.get_open_schematic() {
+        // the KiCAD IPC API does not work properly with schematics as of November 2024
+        // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
+        // modification without save cannot be sent
+        let schematic_ds = schematic.doc;
+        // debug!("schematic_ds = {:?}", schematic_ds.clone());
+        self.set_current_file_from_document_specifier(schematic_ds.clone())?;
+      }
     }
     else if w.title.contains("PCB Editor") {
-      // for the PCB editor, we can instead use the Rust bindings proper
-      let board = k.get_open_board()?;
-      let board_ds = board.doc;
-      debug!("board_ds = {:?}", board_ds.clone());
-      self.set_current_file_from_document_specifier(board_ds.clone())?;
-      self.set_many_items()?;
+      if let Ok(board) = k.get_open_board() {
+        // for the PCB editor, we can instead use the Rust bindings proper
+        let board_ds = board.doc;
+        // debug!("board_ds = {:?}", board_ds.clone());
+        self.set_current_file_from_document_specifier(board_ds.clone())?;
+        self.set_many_items()?;
+      }
     } else {
       // debug!("{:?}", w.title);
     }
+    self.first_iteration_finished = true;
     Ok(())
   }
   pub fn get_active_window(&mut self) -> Result<ActiveWindow, ()> {
@@ -106,7 +138,7 @@ impl<'a> Plugin {
     // as far as i can tell, active_win_pos_rs will focus on kicad-wakatime
     // when it starts, and that window should by all means have a title.
     // if the field is empty, kicad-wakatime is missing permissions
-    if active_window.clone().is_ok_and(|w| (w.app_name == "kicad-wakatime" || w.app_name == "FLTK") && w.title == "") {
+    if active_window.clone().is_ok_and(|w| w.app_name == "kicad-wakatime" && w.title == "") {
       self.dual_error(String::from("Could not get title of active window!"));
       self.dual_error(String::from("If you are on macOS, please give kicad-wakatime Screen Recording permission"));
       self.dual_error(String::from("(System Settings -> Privacy and Security -> Screen Recording)"));
@@ -262,13 +294,17 @@ impl<'a> Plugin {
     }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
+    // TODO: why is this line?
     std::thread::sleep(Duration::from_millis(500));
     let k = KiCad::new(KiCadConnectionConfig {
       client_name: String::from("kicad-wakatime"),
       ..Default::default()
     }).ok();
     if k.is_some() {
-      self.kicad = k;
+      let k = k.unwrap();
+      k.socket.set_opt::<SendTimeout>(Some(std::time::Duration::from_millis(1000)))?;
+      k.socket.set_opt::<RecvTimeout>(Some(std::time::Duration::from_millis(1000)))?;
+      self.kicad = Some(k);
       self.dual_info(format!("Connected to KiCAD!"));
     } else {
       self.dual_error(String::from("Could not connect to KiCAD!"));
@@ -283,13 +319,19 @@ impl<'a> Plugin {
   pub fn recursively_add_full_paths(&mut self, path: PathBuf) -> Result<(), anyhow::Error> {
     for path in fs::read_dir(path)? {
       let path = path.unwrap().path();
-      if path.is_dir() { self.recursively_add_full_paths(path.clone()); };
+      if path.is_dir() { self.recursively_add_full_paths(path.clone())?; };
       if !path.is_file() { continue; };
       let file_name = path.file_name().unwrap().to_str().unwrap();
       // let file_stem = path.file_stem().unwrap().to_str().unwrap();
       let Some(file_extension) = path.extension() else { continue; };
       let file_extension = file_extension.to_str().unwrap();
       if file_extension == "kicad_sch" || file_extension == "kicad_pcb" {
+        if self.full_paths.contains_key(file_name) {
+          self.dual_error(format!("Found multiple files named {file_name} in the projects folder!"));
+          self.dual_error(format!("Please select a folder that only contains one file named {file_name}!"));
+          self.full_paths = HashMap::new();
+          return Ok(())
+        }
         self.full_paths.insert(
           file_name.to_string(),
         path
@@ -302,6 +344,7 @@ impl<'a> Plugin {
     &self,
     specifier: &DocumentSpecifier,
   ) -> String {
+    // TODO: other variants
     let Some(Identifier::BoardFilename(ref filename)) = specifier.identifier else { unreachable!(); };
     filename.to_string()
   }
@@ -309,43 +352,8 @@ impl<'a> Plugin {
     &mut self,
     specifier: DocumentSpecifier,
   ) -> Result<(), anyhow::Error> {
-    debug!("Updating current file...");
-    // filename
-    // TODO: other variants
     let filename = self.get_filename_from_document_specifier(&specifier);
-    // full path
-    let project = specifier.project.0;
-    let full_path = match project {
-      // in the PCB editor, the specifier's project field is populated
-      Some(project) => {
-        let full_path = PathBuf::from(project.path).join(filename.clone());
-        let file_stem = full_path.file_stem().unwrap().to_str().unwrap();
-        self.full_paths.insert(
-          format!("{file_stem}.kicad_sch"),
-          full_path.parent().unwrap().join(format!("{file_stem}.kicad_sch"))
-        );
-        self.full_paths.insert(
-          format!("{file_stem}.kicad_pcb"),
-          full_path.parent().unwrap().join(format!("{file_stem}.kicad_pcb"))
-        );
-        full_path
-      },
-      // in the schematic editor, the specifier's project field is not populated.
-      // ask the user to switch to the PCB editor for this schematic so that the
-      // full path can be stored
-      None => {
-        if self.get_full_path(filename.clone()).is_none() {
-          if !self.warned_filenames.contains(&filename) {
-            self.dual_warn(format!("Schematic \"{}\" cannot be tracked yet!", filename.clone()));
-            self.dual_warn(String::from("Please switch to the PCB editor first!"));
-            self.dual_warn(String::from("You can then track time spent in both the schematic editor and PCB editor for this project"));
-            self.warned_filenames.push(filename.clone());
-          }
-          return Ok(())
-        }
-        self.get_full_path(filename.clone()).unwrap().to_path_buf()
-      }
-    };
+    let full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
     if self.filename != filename {
       self.dual_info(String::from("Focused file changed!"));
       // since the focused file changed, it might be time to send a heartbeat.
@@ -359,10 +367,10 @@ impl<'a> Plugin {
         self.filename = filename.clone();
         self.full_path = full_path.clone();
       }
-      debug!("filename = {:?}", self.filename.clone());
-      debug!("full_path = {:?}", self.full_path.clone());
+      // debug!("filename = {:?}", self.filename.clone());
+      // debug!("full_path = {:?}", self.full_path.clone());
     } else {
-      debug!("Focused file did not change!")
+      // debug!("Focused file did not change!")
     }
     Ok(())
   }
@@ -374,11 +382,11 @@ impl<'a> Plugin {
     if path == PathBuf::from("") {
       return Ok(())
     }
+    self.dual_info(format!("Watching {:?} for changes", path));
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::Recursive).unwrap();
-    self.dual_info(format!("Watcher set up to watch {:?} for changes", path));
-    // add to full_paths
-    self.recursively_add_full_paths(path);
+    self.full_paths = HashMap::new();
+    self.recursively_add_full_paths(path.clone())?;
     debug!("full_paths = {:?}", self.full_paths);
     Ok(())
   }
@@ -386,7 +394,7 @@ impl<'a> Plugin {
     let Some(ref rx) = self.rx else { unreachable!(); };
     let recv = rx.try_recv();
     if recv.is_ok() { // watched file was saved
-      if let Ok(Ok(notify::Event { kind, paths, attrs })) = recv {
+      if let Ok(Ok(notify::Event { kind: _, paths, attrs: _ })) = recv {
         if !paths.contains(&self.full_path) {
           return Ok(())
         }
@@ -395,25 +403,6 @@ impl<'a> Plugin {
       }
     }
     Ok(())
-  }
-  pub fn try_ui_recv(&mut self) {
-    match self.ui.receiver.recv() {
-      Some(Message::OpenSettingsWindow) => {
-        self.ui.settings_window_ui.settings_window.show();
-      },
-      Some(Message::CloseSettingsWindow) => {
-        self.ui.settings_window_ui.settings_window.hide();
-        self.store_config();
-      },
-      Some(Message::UpdateSettings) => {
-        self.set_projects_folder(self.ui.settings_window_ui.projects_folder.value());
-        self.set_api_key(self.ui.settings_window_ui.api_key.value());
-        self.set_api_url(self.ui.settings_window_ui.server_url.value().unwrap());
-        self.watch_files(PathBuf::from(self.ui.settings_window_ui.projects_folder.value()));
-        self.store_config();
-      }
-      None => {},
-    }
   }
   pub fn current_time(&self) -> Duration {
     SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards!")
@@ -432,57 +421,34 @@ impl<'a> Plugin {
   }
   // TODO: change sig
   pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
-    debug!("Updating board items...");
+    // debug!("Updating board items...");
     let Some(ref k) = self.kicad else { return Ok(()) };
-    let board = k.get_open_board()?;
+    let Ok(board) = k.get_open_board() else { return Ok(()) };
     let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    // TODO: write cooler function
-    let mut attempts = 0;
-    let tracks = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get tracks! (10 tries)"));
+    let objects = board.get_items(&[
+      KiCadObjectType::KOT_PCB_ARC,
+      KiCadObjectType::KOT_PCB_FOOTPRINT,
+      KiCadObjectType::KOT_PCB_PAD,
+      KiCadObjectType::KOT_PCB_TRACE,
+      KiCadObjectType::KOT_PCB_VIA,
+    ]);
+    // when some objects are selected, KiCAD will return this error instead of
+    // returning the objects.
+    // because set_many_items is called so much, KiCAD finds its way eventually,
+    // and this error can be safely ignored.
+    if let Err(KiCadError::ApiError(ref e)) = objects {
+      if e.eq(&String::from("KiCad API returned error: KiCad is busy and cannot respond to API requests right now")) {
         return Ok(())
-      };
-      if let Ok(tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_TRACE]) { break tracks; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let arc_tracks = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get arc tracks! (10 tries)"));
-        return Ok(())
-      };
-      // TODO: is this the right variant?
-      if let Ok(arc_tracks) = board.get_items(&[KiCadObjectType::KOT_PCB_ARC]) { break arc_tracks; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let vias = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get vias! (10 tries)"));
-        return Ok(())
-      };
-      if let Ok(vias) = board.get_items(&[KiCadObjectType::KOT_PCB_VIA]) { break vias; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let footprint_instances = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get footprint instances! (10 tries)"));
-        return Ok(())
-      };
-      if let Ok(footprint_instances) = board.get_items(&[KiCadObjectType::KOT_PCB_FOOTPRINT]) { break footprint_instances; }
-      attempts += 1;
-    };
-    attempts = 0;
-    let pads = loop {
-      if attempts > 10 {
-        self.dual_warn(String::from("Could not get pads! (10 tries)"));
-        return Ok(())
-      };
-      if let Ok(pads) = board.get_items(&[KiCadObjectType::KOT_PCB_PAD]) { break pads; }
-      attempts += 1;
-    };
+      }
+    }
+    // propagate any other types of errors with ?.
+    let objects = objects?;
+    // type split
+    let arc_tracks = objects.iter().cloned().filter(|o| o.is_arc_track()).collect();
+    let footprint_instances = objects.iter().cloned().filter(|o| o.is_footprint_instance()).collect();
+    let pads = objects.iter().cloned().filter(|o| o.is_pad()).collect();
+    let tracks = objects.iter().cloned().filter(|o| o.is_track()).collect();
+    let vias = objects.iter().cloned().filter(|o| o.is_via()).collect();
     items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
     items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
@@ -497,7 +463,7 @@ impl<'a> Plugin {
       // since the items changed, it might be time to send a heartbeat
       self.maybe_send_heartbeat(self.filename.clone(), false)?;
     } else {
-      debug!("Board items did not change!");
+      // debug!("Board items did not change!");
     }
     Ok(())
   }
@@ -535,6 +501,7 @@ impl<'a> Plugin {
       self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
       self.dual_warn(String::from("Updating last_sent_time anyway"));
       self.last_sent_time = self.current_time();
+      self.last_sent_time_chrono = Some(Local::now());
       return Ok(())
     }
     let full_path = self.full_path.clone();
@@ -576,12 +543,10 @@ impl<'a> Plugin {
     // heartbeat should have been sent at this point
     self.dual_info(String::from("Finished!"));
     self.last_sent_time = self.current_time();
+    self.last_sent_time_chrono = Some(Local::now());
     self.last_sent_file = full_path_string;
     debug!("last_sent_time = {:?}", self.last_sent_time);
     debug!("last_sent_file = {:?}", self.last_sent_file);
-    // update UI
-    let formatted_time = Local::now().format("%H:%M:%S");
-    self.ui.main_window_ui.last_heartbeat_box.set_value(format!("{formatted_time}").as_str());
     Ok(())
   }
   /// Return the path to the .wakatime.cfg file.
@@ -633,15 +598,15 @@ impl<'a> Plugin {
   }
   pub fn dual_info(&mut self, s: String) {
     info!("{}", s);
-    self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
+    // self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_warn(&mut self, s: String) {
     warn!("{}", s);
-    self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
+    // self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
   }
   pub fn dual_error(&mut self, s: String) {
     error!("{}", s);
-    self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
+    // self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
 }
 
