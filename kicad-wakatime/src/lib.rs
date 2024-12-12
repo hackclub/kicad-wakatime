@@ -297,23 +297,15 @@ impl<'a> Plugin {
     }
   }
   pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
-    // TODO: why is this line?
     std::thread::sleep(Duration::from_millis(500));
     let k = KiCad::new(KiCadConnectionConfig {
       client_name: String::from("kicad-wakatime"),
       ..Default::default()
-    }).ok();
-    if k.is_some() {
-      let k = k.unwrap();
-      k.socket.set_opt::<SendTimeout>(Some(std::time::Duration::from_millis(1000)))?;
-      k.socket.set_opt::<RecvTimeout>(Some(std::time::Duration::from_millis(1000)))?;
-      self.kicad = Some(k);
-      info!("Connected to KiCAD!");
-    } else {
-      error!("Could not connect to KiCAD!");
-      error!("Please ensure you are running KiCAD 8.99, and the KiCAD API is enabled");
-      error!("(Settings -> Plugins -> Enable KiCAD API)");
-    }
+    })?;
+    k.socket.set_opt::<SendTimeout>(Some(std::time::Duration::from_millis(1000)))?;
+    k.socket.set_opt::<RecvTimeout>(Some(std::time::Duration::from_millis(1000)))?;
+    self.kicad = Some(k);
+    info!("Connected to KiCAD!");
     Ok(())
   }
   pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {

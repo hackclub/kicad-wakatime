@@ -71,7 +71,15 @@ fn main() -> Result<(), anyhow::Error> {
         return;
       }
       if plugin.kicad.is_none() && sys.find_process("kicad").is_some() {
-        let _ = plugin.connect_to_kicad();
+        match plugin.connect_to_kicad() {
+          Ok(()) => {},
+          Err(e) => {
+            error!("Could not connect to KiCAD!");
+            error!("Please ensure you are running KiCAD 8.99, and the KiCAD API is enabled");
+            error!("(Settings -> Plugins -> Enable KiCAD API)");
+            error!("Specific error from nng: {:?}", e);
+          }
+        }
         return;
       }
       // have to handle the error case this way since the callback to add_idle3
