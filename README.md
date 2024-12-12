@@ -6,7 +6,7 @@
 
 On all platforms:
 1. Download the latest release of kicad-wakatime from the releases section.
-2. Enable the KiCAD API in KiCAD 8.99. (Settings -> Plugins -> Enable KiCAD API)
+2. Enable the KiCAD API in KiCAD 8.99. (Preferences -> Preferences -> Plugins -> Enable KiCAD API)
 3. Enable the auto save feature in KiCAD 8.99. (Settings -> Common -> Auto save)
 4. Open kicad-wakatime and fill out the settings.
 5. Start designing!
@@ -33,3 +33,14 @@ The bug report template will ask you for a magic word to confirm that you've rea
 The magic word is **"dreadnought"**.
 
 Please make sure you're running KiCAD 8.99 (**not** KiCAD 8.0!) and the KiCAD API is enabled.
+
+# Frequently Asked Questions (FAQs)
+<ol type="1">
+    <li>
+        Where can I find Enable KiCad API?
+        <img src="images/kicad_ytQ5q6gGVf.png">
+        <img src="images/kicad_o1BXg2Mx8F.png">
+        <img src="images/kicad_o1BXg2Mx8F.png">
+        <img src="images/kicad_VjH5BSyfCd.png">
+    </li>
+</ol>
