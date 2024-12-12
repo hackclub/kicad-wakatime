@@ -7,6 +7,9 @@ use eframe::egui::{self};
 use kicad_wakatime::{ui::Ui, traits::{DebugProcesses, FindProcess}, Plugin};
 use clap::Parser;
 use log::debug;
+use log::error;
+use log::info;
+use log::warn;
 use sysinfo::System;
 
 /// WakaTime plugin for KiCAD nightly
@@ -44,7 +47,7 @@ fn main() -> Result<(), anyhow::Error> {
     args.disable_heartbeats,
     args.redownload,
   );
-  plugin.dual_info(String::from("Initializing kicad-wakatime..."));
+  info!("Initializing kicad-wakatime...");
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
 
@@ -63,7 +66,7 @@ fn main() -> Result<(), anyhow::Error> {
       // connection check
       sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
       if plugin.kicad.is_some() && sys.find_process("kicad").is_none() {
-        plugin.dual_warn(String::from("Lost connection to KiCAD!"));
+        warn!("Lost connection to KiCAD!");
         plugin.kicad = None;
         return;
       }
@@ -76,14 +79,14 @@ fn main() -> Result<(), anyhow::Error> {
       match plugin.main_loop() {
         Ok(_) => {},
         Err(e) => {
-          plugin.dual_error(format!("{:?}", e));
+          error!("{:?}", e);
           plugin.first_iteration_finished = true;
         }
       };
       match plugin.try_recv() {
         Ok(_) => {},
         Err(e) => {
-          plugin.dual_error(format!("{:?}", e));
+          error!("{:?}", e);
         }
       };
       ctx.request_repaint();

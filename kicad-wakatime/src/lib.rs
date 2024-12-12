@@ -139,24 +139,24 @@ impl<'a> Plugin {
     // when it starts, and that window should by all means have a title.
     // if the field is empty, kicad-wakatime is missing permissions
     if active_window.clone().is_ok_and(|w| w.app_name == "kicad-wakatime" && w.title == "") {
-      self.dual_error(String::from("Could not get title of active window!"));
-      self.dual_error(String::from("If you are on macOS, please give kicad-wakatime Screen Recording permission"));
-      self.dual_error(String::from("(System Settings -> Privacy and Security -> Screen Recording)"));
+      error!("Could not get title of active window!");
+      error!("If you are on macOS, please give kicad-wakatime Screen Recording permission");
+      error!("(System Settings -> Privacy and Security -> Screen Recording)");
     }
     active_window
   }
   pub fn check_cli_installed(&mut self, redownload: bool) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
-    self.dual_info(format!("WakaTime CLI path: {:?}", cli_path));
+    info!("WakaTime CLI path: {:?}", cli_path);
     if fs::exists(cli_path)? {
-      self.dual_info(String::from("File exists!"));
+      info!("File exists!");
       // TODO: update to latest version if needed
     } else {
-      self.dual_info(String::from("File does not exist!"));
+      info!("File does not exist!");
       self.get_latest_release()?;
     }
     if redownload {
-      self.dual_info(String::from("Redownloading WakaTime CLI (--redownload used)"));
+      info!("Redownloading WakaTime CLI (--redownload used)");
       self.get_latest_release()?;
     }
     Ok(())
@@ -166,7 +166,7 @@ impl<'a> Plugin {
     // need to insert some kind of user agent to avoid getting 403 forbidden
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("user-agent", "kicad-wakatime/1.0".parse().unwrap());
-    self.dual_info(String::from("Checking kicad-wakatime version"));
+    info!("Checking kicad-wakatime version");
     let res = client.get("https://api.github.com/repos/hackclub/kicad-wakatime/releases/latest")
       .headers(headers)
       .send()?;
@@ -175,7 +175,7 @@ impl<'a> Plugin {
     // sanity check
     if let serde_json::Value::String(message) = &json["message"] {
       if message == &String::from("Not Found") {
-        self.dual_warn(String::from("No kicad-wakatime releases found!"));
+        warn!("No kicad-wakatime releases found!");
         return Ok(())
       }
     }
@@ -184,10 +184,10 @@ impl<'a> Plugin {
       .unwrap()
       .to_string();
     if name != PLUGIN_VERSION {
-      self.dual_info(String::from("kicad-wakatime update available!"));
-      self.dual_info(String::from("Visit https://github.com/hackclub/kicad-wakatime to download it"));
+      info!("kicad-wakatime update available!");
+      info!("Visit https://github.com/hackclub/kicad-wakatime to download it");
     } else {
-      self.dual_info(String::from("Up to date!"));
+      info!("Up to date!");
     }
     Ok(())
   }
@@ -203,7 +203,7 @@ impl<'a> Plugin {
       fs::create_dir(self.wakatime_folder_path())?;
     }
     // get download URL
-    self.dual_info(String::from("Getting latest version from GitHub API"));
+    info!("Getting latest version from GitHub API");
     let res = client.get("https://api.github.com/repos/wakatime/wakatime-cli/releases/latest")
       .headers(headers.clone())
       .send()?;
@@ -217,7 +217,7 @@ impl<'a> Plugin {
       .unwrap();
     let download_url = asset["browser_download_url"].as_str().unwrap().to_owned();
     // download .zip file
-    self.dual_info(format!("Downloading {download_url}..."));
+    info!("Downloading {download_url}...");
     let res = client.get(download_url)
       .headers(headers)
       .send()?;
@@ -227,7 +227,7 @@ impl<'a> Plugin {
     zip_file.write_all(&zip_bytes)?;
     let zip_vec_u8: Vec<u8> = fs::read(self.cli_zip_path(env_consts())).unwrap();
     // extract .zip file
-    self.dual_info(String::from("Extracting .zip..."));
+    info!("Extracting .zip...");
     zip_extract::extract(
       Cursor::new(zip_vec_u8),
       &self.wakatime_folder_path(),
@@ -236,7 +236,7 @@ impl<'a> Plugin {
     // remove zip file
     fs::remove_file(self.cli_zip_path(env_consts()))?;
     // return
-    self.dual_info(String::from("Finished!"));
+    info!("Finished!");
     Ok(())
   }
   pub fn load_config(&mut self) {
@@ -308,11 +308,11 @@ impl<'a> Plugin {
       k.socket.set_opt::<SendTimeout>(Some(std::time::Duration::from_millis(1000)))?;
       k.socket.set_opt::<RecvTimeout>(Some(std::time::Duration::from_millis(1000)))?;
       self.kicad = Some(k);
-      self.dual_info(format!("Connected to KiCAD!"));
+      info!("Connected to KiCAD!");
     } else {
-      self.dual_error(String::from("Could not connect to KiCAD!"));
-      self.dual_error(String::from("Please ensure you are running KiCAD 8.99, and the KiCAD API is enabled"));
-      self.dual_error(String::from("(Settings -> Plugins -> Enable KiCAD API)"));
+      error!("Could not connect to KiCAD!");
+      error!("Please ensure you are running KiCAD 8.99, and the KiCAD API is enabled");
+      error!("(Settings -> Plugins -> Enable KiCAD API)");
     }
     Ok(())
   }
@@ -330,8 +330,8 @@ impl<'a> Plugin {
       let file_extension = file_extension.to_str().unwrap();
       if file_extension == "kicad_sch" || file_extension == "kicad_pcb" {
         if self.full_paths.contains_key(file_name) {
-          self.dual_error(format!("Found multiple files named {file_name} in the projects folder!"));
-          self.dual_error(format!("Please select a folder that only contains one file named {file_name}!"));
+          error!("Found multiple files named {file_name} in the projects folder!");
+          error!("Please select a folder that only contains one file named {file_name}!");
           self.full_paths = HashMap::new();
           return Ok(())
         }
@@ -358,12 +358,12 @@ impl<'a> Plugin {
     let filename = self.get_filename_from_document_specifier(&specifier);
     let full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
     if self.filename != filename {
-      self.dual_info(String::from("Focused file changed!"));
+      info!("Focused file changed!");
       // since the focused file changed, it might be time to send a heartbeat.
       // self.filename and self.path are not actually updated here unless they
       // were empty before, so self.maybe_send_heartbeat() can use the difference
       // as a condition in its check
-      self.dual_info(format!("Filename: {}", filename.clone()));
+      info!("Filename: {}", filename.clone());
       if self.filename != String::new() {
         self.maybe_send_heartbeat(filename.clone(), false)?;
       } else {
@@ -385,7 +385,7 @@ impl<'a> Plugin {
     if path == PathBuf::from("") {
       return Ok(())
     }
-    self.dual_info(format!("Watching {:?} for changes", path));
+    info!("Watching {:?} for changes", path);
     self.create_file_watcher()?;
     self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::Recursive).unwrap();
     self.full_paths = HashMap::new();
@@ -401,7 +401,7 @@ impl<'a> Plugin {
         if !paths.contains(&self.full_path) {
           return Ok(())
         }
-        self.dual_info(String::from("File saved!"));
+        info!("File saved!");
         self.maybe_send_heartbeat(self.filename.clone(), true)?;
       }
     }
@@ -499,10 +499,10 @@ impl<'a> Plugin {
     Ok(())
   }
   pub fn send_heartbeat(&mut self, is_file_saved: bool) -> Result<(), anyhow::Error> {
-    self.dual_info(String::from("Sending heartbeat..."));
+    info!("Sending heartbeat...");
     if self.disable_heartbeats {
-      self.dual_warn(String::from("Heartbeats are disabled (using --disable-heartbeats)"));
-      self.dual_warn(String::from("Updating last_sent_time anyway"));
+      warn!("Heartbeats are disabled (using --disable-heartbeats)");
+      warn!("Updating last_sent_time anyway");
       self.last_sent_time = self.current_time();
       self.last_sent_time_chrono = Some(Local::now());
       return Ok(())
@@ -533,7 +533,7 @@ impl<'a> Plugin {
     if is_file_saved {
       cli.arg("--write");
     }
-    self.dual_info(String::from("Executing WakaTime CLI..."));
+    info!("Executing WakaTime CLI...");
     let cli_output = cli.output()
       .expect("Could not execute WakaTime CLI!");
     let cli_status = cli_output.status;
@@ -544,7 +544,7 @@ impl<'a> Plugin {
     debug!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
     debug!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
     // heartbeat should have been sent at this point
-    self.dual_info(String::from("Finished!"));
+    info!("Finished!");
     self.last_sent_time = self.current_time();
     self.last_sent_time_chrono = Some(Local::now());
     self.last_sent_file = full_path_string;
@@ -598,18 +598,6 @@ impl<'a> Plugin {
   /// The file is downloaded into the .wakatime folder.
   pub fn cli_zip_path(&self, consts: (&'static str, &'static str)) -> PathBuf {
     self.wakatime_folder_path().join(self.cli_zip_name(consts))
-  }
-  pub fn dual_info(&mut self, s: String) {
-    info!("{}", s);
-    // self.ui.main_window_ui.log_window.append(format!("\x1b[32m[info]\x1b[0m  {s}\n").as_str());
-  }
-  pub fn dual_warn(&mut self, s: String) {
-    warn!("{}", s);
-    // self.ui.main_window_ui.log_window.append(format!("\x1b[33m[warn]\x1b[0m  {s}\n").as_str());
-  }
-  pub fn dual_error(&mut self, s: String) {
-    error!("{}", s);
-    // self.ui.main_window_ui.log_window.append(format!("\x1b[31m[error]\x1b[0m {s}\n").as_str());
   }
 }
 
