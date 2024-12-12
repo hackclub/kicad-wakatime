@@ -166,10 +166,11 @@ impl<'a> Plugin {
     // need to insert some kind of user agent to avoid getting 403 forbidden
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("user-agent", "kicad-wakatime/1.0".parse().unwrap());
+    self.dual_info(String::from("Checking kicad-wakatime version"));
     let res = client.get("https://api.github.com/repos/hackclub/kicad-wakatime/releases/latest")
       .headers(headers)
-      .send()
-      .expect("Could not make request!");
+      .send()?;
+      // .expect("Could not make request!");
     let json = res.json::<serde_json::Value>().unwrap();
     // sanity check
     if let serde_json::Value::String(message) = &json["message"] {
@@ -185,6 +186,8 @@ impl<'a> Plugin {
     if name != PLUGIN_VERSION {
       self.dual_info(String::from("kicad-wakatime update available!"));
       self.dual_info(String::from("Visit https://github.com/hackclub/kicad-wakatime to download it"));
+    } else {
+      self.dual_info(String::from("Up to date!"));
     }
     Ok(())
   }
@@ -203,8 +206,8 @@ impl<'a> Plugin {
     self.dual_info(String::from("Getting latest version from GitHub API"));
     let res = client.get("https://api.github.com/repos/wakatime/wakatime-cli/releases/latest")
       .headers(headers.clone())
-      .send()
-      .expect("Could not make request!");
+      .send()?;
+      // .expect("Could not make request!");
     let json = res.json::<serde_json::Value>().unwrap();
     let asset = json["assets"]
       .as_array()
@@ -217,9 +220,9 @@ impl<'a> Plugin {
     self.dual_info(format!("Downloading {download_url}..."));
     let res = client.get(download_url)
       .headers(headers)
-      .send()
-      .expect("Could not make request!");
-    let zip_bytes = res.bytes().expect("Could not parse bytes!");
+      .send()?;
+      // .expect("Could not make request!");
+    let zip_bytes = res.bytes()?;
     let mut zip_file = fs::File::create(self.cli_zip_path(env_consts())).unwrap();
     zip_file.write_all(&zip_bytes)?;
     let zip_vec_u8: Vec<u8> = fs::read(self.cli_zip_path(env_consts())).unwrap();

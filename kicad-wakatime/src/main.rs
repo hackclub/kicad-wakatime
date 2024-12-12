@@ -75,7 +75,10 @@ fn main() -> Result<(), anyhow::Error> {
       // does not return Result
       match plugin.main_loop() {
         Ok(_) => {},
-        Err(e) => { plugin.dual_error(format!("{:?}", e)); }
+        Err(e) => {
+          plugin.dual_error(format!("{:?}", e));
+          plugin.first_iteration_finished = true;
+        }
       };
       match plugin.try_recv() {
         Ok(_) => {},
