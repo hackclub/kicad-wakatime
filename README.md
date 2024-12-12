@@ -11,6 +11,9 @@ On all platforms:
 4. Open kicad-wakatime and fill out the settings.
 5. Start designing!
 
+If you know what you're doing, you can build kicad-wakatime from the main branch instead. This requires an up-to-date version of [CMake](https://cmake.org) and [protoc](https://grpc.io/docs/protoc-installation).\
+The code in the main branch should be considered unstable, as some features may still be in progress between releases.
+
 ## Downloading KiCAD 8.99
 
 If you are a Windows user, you can download KiCAD 8.99 [here](https://downloads.kicad.org/kicad/windows/explore/nightlies) (pick an "x86_64.exe".)
