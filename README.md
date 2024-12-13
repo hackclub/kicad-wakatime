@@ -7,9 +7,8 @@
 On all platforms:
 1. Download the latest release of kicad-wakatime from the releases section. [Click here for downloads.](https://github.com/hackclub/kicad-wakatime/releases)
 2. Enable the KiCAD API in KiCAD 8.99. (Settings -> Plugins -> Enable KiCAD API)
-3. Enable the auto save feature in KiCAD 8.99. (Settings -> Common -> Auto save)
-4. Open kicad-wakatime and fill out the settings.
-5. Start designing!
+3. Open kicad-wakatime and fill out the settings.
+4. Start designing!
 
 If you know what you're doing, you can build kicad-wakatime from the main branch instead. This requires an up-to-date version of [CMake](https://cmake.org) and [protoc](https://grpc.io/docs/protoc-installation).\
 The code in the main branch should be considered unstable, as some features may still be in progress between releases.
