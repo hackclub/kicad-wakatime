@@ -20,6 +20,7 @@ home = "0.5.9"
 # kicad-api-rs = "0.0.1"
 kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
+log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 mouse_position = "0.1.4"
 multi_log = "0.1.2"
 nng = "1.0.1"

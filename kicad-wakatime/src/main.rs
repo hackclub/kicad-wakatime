@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-use std::fs::File;
+use std::{env, fs::File};
 use std::io::Write;
 use chrono::Local;
 use eframe::egui::{self};
@@ -28,6 +28,7 @@ pub struct Args {
 
 fn main() -> Result<(), anyhow::Error> {
   // pre-initialization
+  env::set_var("RUST_BACKTRACE", "1");
   let args = Args::parse();
   // egui_logger
   let egui_logger = Box::new(egui_logger::builder().build());
@@ -54,6 +55,7 @@ fn main() -> Result<(), anyhow::Error> {
   );
   MultiLogger::init(vec![egui_logger, env_logger], log::Level::Debug)
     .expect("Could not initialize multi logger!");
+  log_panics::init();
 
   debug!("(os, arch) = {:?}", kicad_wakatime::env_consts());
 
