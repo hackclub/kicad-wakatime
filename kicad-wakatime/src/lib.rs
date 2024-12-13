@@ -379,7 +379,7 @@ impl<'a> Plugin {
     }
     info!("Watching {:?} for changes", path);
     self.create_file_watcher()?;
-    self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::Recursive).unwrap();
+    self.file_watcher.as_mut().unwrap().watch(path.as_path(), RecursiveMode::Recursive)?;
     self.full_paths = HashMap::new();
     self.recursively_add_full_paths(path.clone())?;
     debug!("full_paths = {:?}", self.full_paths);
