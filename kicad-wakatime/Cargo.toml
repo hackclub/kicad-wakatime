@@ -15,11 +15,13 @@ clap = { version = "4.5.21", features = ["derive"] }
 eframe = "0.29.1"
 egui-modal = "0.5.0"
 egui_logger = "0.6.1"
+env_logger = "0.11.5"
 home = "0.5.9"
 # kicad-api-rs = "0.0.1"
 kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
 mouse_position = "0.1.4"
+multi_log = "0.1.2"
 nng = "1.0.1"
 notify = "7.0.0"
 reqwest = { version = "0.12.9", features = ["blocking", "json"] }

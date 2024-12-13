@@ -1,5 +1,8 @@
 #![windows_subsystem = "windows"]
 
+use std::fs::File;
+use std::io::Write;
+use chrono::Local;
 use eframe::egui::{self};
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
@@ -10,6 +13,7 @@ use log::debug;
 use log::error;
 use log::info;
 use log::warn;
+use multi_log::MultiLogger;
 use sysinfo::System;
 
 /// WakaTime plugin for KiCAD nightly
@@ -25,7 +29,32 @@ pub struct Args {
 fn main() -> Result<(), anyhow::Error> {
   // pre-initialization
   let args = Args::parse();
-  egui_logger::builder().init().unwrap();
+  // egui_logger
+  let egui_logger = Box::new(egui_logger::builder().build());
+  // need to find path like this because Plugin will not have been made yet
+  let home_dir = home::home_dir().expect("Unable to get your home directory!");
+  let kicad_wakatime_log_path = home_dir.join(".kicad-wakatime.log");
+  let target = Box::new(File::create(kicad_wakatime_log_path)?);
+  // env_logger
+  let env_logger = Box::new(
+    env_logger::Builder::new()
+      .target(env_logger::Target::Pipe(target))
+      .filter(None, log::LevelFilter::Debug)
+      .format(|buf, record| {
+        writeln!(
+          buf,
+          "{} [{}] {}: {}",
+          Local::now().format("%H:%M:%S"),
+          record.level(),
+          record.file().unwrap_or("unknown"),
+          record.args()
+        )
+      })
+      .build()
+  );
+  MultiLogger::init(vec![egui_logger, env_logger], log::Level::Debug)
+    .expect("Could not initialize multi logger!");
+
   debug!("(os, arch) = {:?}", kicad_wakatime::env_consts());
 
   #[cfg(target_os = "macos")]

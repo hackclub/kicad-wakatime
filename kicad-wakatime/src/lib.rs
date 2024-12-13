@@ -554,6 +554,11 @@ impl<'a> Plugin {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
     home_dir.join(".kicad-wakatime.cfg")
   }
+  // /// Return the path to the .kicad-wakatime.log file.
+  // pub fn kicad_wakatime_log_path(&self) -> PathBuf {
+  //   let home_dir = home::home_dir().expect("Unable to get your home directory!");
+  //   home_dir.join(".kicad-wakatime.log")
+  // }
   /// Return the path to the .wakatime folder.
   pub fn wakatime_folder_path(&self) -> PathBuf {
     let home_dir = home::home_dir().expect("Unable to get your home directory!");
