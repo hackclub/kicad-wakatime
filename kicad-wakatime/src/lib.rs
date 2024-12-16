@@ -329,7 +329,7 @@ impl<'a> Plugin {
         }
         self.full_paths.insert(
           file_name.to_string(),
-        path
+          path
         );
       }
     }
@@ -348,6 +348,9 @@ impl<'a> Plugin {
     specifier: DocumentSpecifier,
   ) -> Result<(), anyhow::Error> {
     let filename = self.get_filename_from_document_specifier(&specifier);
+    if filename.is_empty() {
+      return Ok(())
+    }
     let full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
     if self.filename != filename {
       info!("Focused file changed!");
