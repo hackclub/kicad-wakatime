@@ -44,11 +44,12 @@ fn main() -> Result<(), anyhow::Error> {
       .format(|buf, record| {
         writeln!(
           buf,
-          "{} [{}] {}: {}",
+          "{} [{}] [{}] {}: {}",
           Local::now().format("%H:%M:%S"),
           record.level(),
+          record.line().unwrap_or(0),
           record.file().unwrap_or("unknown"),
-          record.args()
+          record.args(),
         )
       })
       .build()
