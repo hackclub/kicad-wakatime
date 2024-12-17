@@ -1,0 +1,80 @@
+/* based on sporeball/nimmoi */
+
+:root {
+  --color-background:#b3cbf2;
+  --color-text:#1d4473;
+  --color-em:#3872ce;
+  --color-link:#4561c9;
+  --color-link-active:#324dae;
+  --color-code:#c5dcf4;
+}
+
+body {
+  background-color:var(--color-background);
+  font-size:16px;
+  font-family:sans-serif;
+  line-height:1.4;
+  color:var(--color-text)
+}
+
+main, footer {
+  margin:auto;
+  max-width:70ch;
+  padding:2ch
+}
+
+main * {
+  margin-bottom:20px
+}
+
+h4 {
+  margin-bottom:2px
+}
+
+h4 + p {
+  margin-top:0
+}
+
+a {
+  font-weight:bold;
+  color:var(--color-link)
+}
+
+a:hover {
+  color:var(--color-link-active)
+}
+
+a[target="_blank"]:after {
+  content:"\00a0*";
+  display:inline-block;
+  text-decoration:none
+}
+
+em, i, small {
+  color:var(--color-em)
+}
+
+code {
+  font-size:14px
+}
+
+pre {
+  padding:5px 10px;
+  background:var(--color-code)
+}
+
+img {
+  margin:0;
+  max-width:100%
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background:#081935;
+    --color-text:#9cbde6;
+    --color-em:#65a0ff;
+    --color-link:#626fff;
+    --color-link-active:#3f80d1;
+    --color-code:#c5dcf4; /* todo */
+  }
+}
