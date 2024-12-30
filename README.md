@@ -27,6 +27,18 @@ sudo apt update
 sudo apt install kicad-nightly
 ```
 
+### If you are a Debian user, you can install KiCAD by:
+
+BookWorm: Via [Backports](https://backports.debian.org/Instructions/)  (8.0.6)
+
+Sid (unstable package - 8.0.7):
+
+```shell
+sudo apt install kicad
+```
+
+The installation guidelines for KiCAD on various Linux distributions are given [here](https://www.kicad.org/download/linux/)
+
 ## Issues
 
 If kicad-wakatime is not doing what you expect, please [open an issue](https://github.com/hackclub/kicad-wakatime/issues).
