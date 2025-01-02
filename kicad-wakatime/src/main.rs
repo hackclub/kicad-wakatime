@@ -7,12 +7,12 @@ use eframe::egui::{self};
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
-use kicad_wakatime::{ui::Ui, traits::{DebugProcesses, FindProcess}, Plugin};
+use kicad_wakatime::{ui::Ui, traits::DebugProcesses, Plugin};
 use clap::Parser;
 use log::debug;
 use log::error;
 use log::info;
-use log::warn;
+// use log::warn;
 use multi_log::MultiLogger;
 use sysinfo::System;
 
@@ -93,27 +93,8 @@ fn main() -> Result<(), anyhow::Error> {
     "kicad-wakatime ^_^",
     native_options,
     move |ctx, _frame| {
-      // draw UI
       plugin.draw_ui(ctx, _frame);
-      // connection check
       sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-      if plugin.kicad.is_some() && sys.find_process("kicad").is_none() {
-        warn!("Lost connection to KiCAD!");
-        plugin.kicad = None;
-        return;
-      }
-      if plugin.kicad.is_none() && sys.find_process("kicad").is_some() {
-        match plugin.connect_to_kicad() {
-          Ok(()) => {},
-          Err(e) => {
-            error!("Could not connect to KiCAD!");
-            error!("Please ensure you are running KiCAD 8.99, and the KiCAD API is enabled");
-            error!("(Settings -> Plugins -> Enable KiCAD API)");
-            error!("Specific error from nng: {:?}", e);
-          }
-        }
-        return;
-      }
       // have to handle the error case this way since the callback to add_idle3
       // does not return Result
       match plugin.main_loop() {

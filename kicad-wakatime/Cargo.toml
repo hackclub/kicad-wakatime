@@ -18,12 +18,12 @@ egui_logger = "0.6.1"
 env_logger = "0.11.5"
 home = "0.5.9"
 # kicad-api-rs = "0.0.1"
-kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
+# kicad-api-rs = { git = "https://gitlab.com/sporeball/kicad-rs.git" }
 log = "0.4.22"
 log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 mouse_position = "0.1.4"
 multi_log = "0.1.2"
-nng = "1.0.1"
+# nng = "1.0.1"
 notify = "7.0.0"
 reqwest = { version = "0.12.9", features = ["blocking", "json"] }
 rfd = "0.15.1"
@@ -32,6 +32,7 @@ serde = "1.0.215"
 serde_json = "1.0.133"
 sysinfo = "0.32.0"
 thiserror = "2.0.3"
+zip = "2.2.2"
 zip-extract = "0.2.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]

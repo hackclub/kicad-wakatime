@@ -8,15 +8,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
 use chrono::{DateTime, Local};
 use ini::Ini;
-use kicad::KiCadError;
-use kicad::{KiCad, KiCadConnectionConfig, board::BoardItem};
-use kicad::protos::base_types::{DocumentSpecifier, document_specifier::Identifier};
-use kicad::protos::enums::KiCadObjectType;
 use log::debug;
 use log::info;
 use log::error;
 use log::warn;
-use nng::options::{Options, SendTimeout, RecvTimeout};
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 
 pub mod ui;
@@ -37,7 +32,7 @@ pub struct Plugin {
   // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
-  pub kicad: Option<KiCad>,
+  // pub kicad: Option<KiCad>,
   // TODO: open an issue for help uncommenting this field
   // pub board: Option<Board<'a>>,
   // filename of currently focused file
@@ -45,12 +40,11 @@ pub struct Plugin {
   // path of currently focused file
   pub full_path: PathBuf,
   pub full_paths: HashMap<String, PathBuf>,
-  pub warned_filenames: Vec<String>,
   pub file_watcher: Option<RecommendedWatcher>,
   pub projects_folder: String,
   pub api_key: String,
   pub api_url: String,
-  pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
+  // pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   pub time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
@@ -75,16 +69,13 @@ impl<'a> Plugin {
       // ui: ui::App::default(),
       tx: None,
       rx: None,
-      kicad: None,
       filename: String::default(),
       full_path: PathBuf::default(),
       full_paths: HashMap::default(),
-      warned_filenames: vec![],
       file_watcher: None,
       projects_folder: String::default(),
       api_key: String::default(),
       api_url: String::default(),
-      items: HashMap::default(),
       time: Duration::default(),
       last_sent_time: Duration::default(),
       last_sent_time_chrono: None,
@@ -105,30 +96,23 @@ impl<'a> Plugin {
       self.first_iteration_finished = true;
       return Ok(());
     };
-    let Some(ref k) = self.kicad else {
+    // note: written this way, split can be Some for some things that aren't KiCAD, e.g. VS Code.
+    // we sanity check it later.
+    let split = w.title.split_once(" — ");
+    let Some((mut project, editor)) = split else {
       self.first_iteration_finished = true;
       return Ok(());
     };
-    if w.title.contains("Schematic Editor") {
-      if let Ok(schematic) = k.get_open_schematic() {
-        // the KiCAD IPC API does not work properly with schematics as of November 2024
-        // (cf. kicad-rs/issues/3), so for the schematic editor, heartbeats for file
-        // modification without save cannot be sent
-        let schematic_ds = schematic.doc;
-        // debug!("schematic_ds = {:?}", schematic_ds.clone());
-        self.set_current_file_from_document_specifier(schematic_ds.clone())?;
-      }
+    if project.starts_with("*") {
+      project = &project[1..project.len()];
     }
-    else if w.title.contains("PCB Editor") {
-      if let Ok(board) = k.get_open_board() {
-        // for the PCB editor, we can instead use the Rust bindings proper
-        let board_ds = board.doc;
-        // debug!("board_ds = {:?}", board_ds.clone());
-        self.set_current_file_from_document_specifier(board_ds.clone())?;
-        self.set_many_items()?;
-      }
-    } else {
-      // debug!("{:?}", w.title);
+    let filename = match editor {
+      "Schematic Editor" => format!("{project}.kicad_sch"),
+      "PCB Editor" => format!("{project}.kicad_pcb"),
+      _ => String::new(),
+    };
+    if !filename.is_empty() && self.get_full_path(filename.clone()).is_some() {
+      self.set_current_file(filename)?;
     }
     self.first_iteration_finished = true;
     Ok(())
@@ -296,18 +280,6 @@ impl<'a> Plugin {
       unreachable!()
     }
   }
-  pub fn connect_to_kicad(&mut self) -> Result<(), anyhow::Error> {
-    std::thread::sleep(Duration::from_millis(500));
-    let k = KiCad::new(KiCadConnectionConfig {
-      client_name: String::from("kicad-wakatime"),
-      ..Default::default()
-    })?;
-    k.socket.set_opt::<SendTimeout>(Some(std::time::Duration::from_millis(1000)))?;
-    k.socket.set_opt::<RecvTimeout>(Some(std::time::Duration::from_millis(1000)))?;
-    self.kicad = Some(k);
-    info!("Connected to KiCAD!");
-    Ok(())
-  }
   pub fn get_full_path(&self, filename: String) -> Option<&PathBuf> {
     self.full_paths.get(&filename)
   }
@@ -335,40 +307,18 @@ impl<'a> Plugin {
     }
     Ok(())
   }
-  pub fn get_filename_from_document_specifier(
-    &self,
-    specifier: &DocumentSpecifier,
-  ) -> String {
-    // TODO: other variants
-    let Some(Identifier::BoardFilename(ref filename)) = specifier.identifier else { unreachable!(); };
-    filename.to_string()
-  }
-  pub fn set_current_file_from_document_specifier(
-    &mut self,
-    specifier: DocumentSpecifier,
-  ) -> Result<(), anyhow::Error> {
-    let filename = self.get_filename_from_document_specifier(&specifier);
-    if filename.is_empty() {
-      return Ok(())
-    }
-    let full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
+  pub fn set_current_file(&mut self, filename: String) -> Result<(), anyhow::Error> {
     if self.filename != filename {
       info!("Focused file changed!");
       // since the focused file changed, it might be time to send a heartbeat.
-      // self.filename and self.path are not actually updated here unless they
-      // were empty before, so self.maybe_send_heartbeat() can use the difference
-      // as a condition in its check
+      // self.filename and self.path are not actually updated here,
+      // so self.maybe_send_heartbeat() can use the difference as a condition in its check
       info!("Filename: {}", filename.clone());
-      if self.filename != String::new() {
-        self.maybe_send_heartbeat(filename.clone(), false)?;
-      } else {
-        self.filename = filename.clone();
-        self.full_path = full_path.clone();
-      }
-      // debug!("filename = {:?}", self.filename.clone());
-      // debug!("full_path = {:?}", self.full_path.clone());
+      self.maybe_send_heartbeat(filename.clone(), false)?;
+      debug!("filename = {:?}", self.filename.clone());
+      debug!("full_path = {:?}", self.full_path.clone());
     } else {
-      // debug!("Focused file did not change!")
+      // debug!("Focused file did not change!");
     }
     Ok(())
   }
@@ -392,7 +342,8 @@ impl<'a> Plugin {
     let Some(ref rx) = self.rx else { unreachable!(); };
     let recv = rx.try_recv();
     if recv.is_ok() { // watched file was saved
-      if let Ok(Ok(notify::Event { kind: _, paths, attrs: _ })) = recv {
+      if let Ok(Ok(notify::Event { kind, paths, attrs: _ })) = recv {
+        debug!("notify::Event {{ kind: {:?}, paths: {:?} }}", kind, paths);
         if !paths.contains(&self.full_path) {
           return Ok(())
         }
@@ -414,56 +365,7 @@ impl<'a> Plugin {
   }
   /// Returns `true` if more than 2 minutes have passed since the last heartbeat.
   pub fn enough_time_passed(&self) -> bool {
-    // self.current_time() > self.last_sent_time + Duration::from_secs(120)
     self.time_passed() > Duration::from_secs(120)
-  }
-  // TODO: change sig
-  pub fn set_many_items(&mut self) -> Result<(), anyhow::Error> {
-    // debug!("Updating board items...");
-    let Some(ref k) = self.kicad else { return Ok(()) };
-    let Ok(board) = k.get_open_board() else { return Ok(()) };
-    let mut items_new: HashMap<KiCadObjectType, Vec<BoardItem>> = HashMap::new();
-    let objects = board.get_items(&[
-      KiCadObjectType::KOT_PCB_ARC,
-      KiCadObjectType::KOT_PCB_FOOTPRINT,
-      KiCadObjectType::KOT_PCB_PAD,
-      KiCadObjectType::KOT_PCB_TRACE,
-      KiCadObjectType::KOT_PCB_VIA,
-    ]);
-    // when some objects are selected, KiCAD will return this error instead of
-    // returning the objects.
-    // because set_many_items is called so much, KiCAD finds its way eventually,
-    // and this error can be safely ignored.
-    if let Err(KiCadError::ApiError(ref e)) = objects {
-      if e.eq(&String::from("KiCad API returned error: KiCad is busy and cannot respond to API requests right now")) {
-        return Ok(())
-      }
-    }
-    // propagate any other types of errors with ?.
-    let objects = objects?;
-    // type split
-    let arc_tracks = objects.iter().cloned().filter(|o| o.is_arc_track()).collect();
-    let footprint_instances = objects.iter().cloned().filter(|o| o.is_footprint_instance()).collect();
-    let pads = objects.iter().cloned().filter(|o| o.is_pad()).collect();
-    let tracks = objects.iter().cloned().filter(|o| o.is_track()).collect();
-    let vias = objects.iter().cloned().filter(|o| o.is_via()).collect();
-    items_new.insert(KiCadObjectType::KOT_PCB_TRACE, tracks);
-    items_new.insert(KiCadObjectType::KOT_PCB_ARC, arc_tracks);
-    items_new.insert(KiCadObjectType::KOT_PCB_VIA, vias);
-    items_new.insert(KiCadObjectType::KOT_PCB_FOOTPRINT, footprint_instances);
-    items_new.insert(KiCadObjectType::KOT_PCB_PAD, pads);
-    if self.items != items_new {
-      debug!("Board items changed!");
-      self.items = items_new;
-      for (kot, vec) in self.items.iter() {
-        debug!("{:?} = [{}]", kot, vec.len());
-      }
-      // since the items changed, it might be time to send a heartbeat
-      self.maybe_send_heartbeat(self.filename.clone(), false)?;
-    } else {
-      // debug!("Board items did not change!");
-    }
-    Ok(())
   }
   /// Send a heartbeat if conditions are met.
   /// This is an analog of vscode-wakatime's `private onEvent(isWrite)`.
@@ -486,7 +388,8 @@ impl<'a> Plugin {
     if is_file_saved ||
     self.enough_time_passed() ||
     self.filename != filename {
-      self.filename = filename;
+      self.filename = filename.clone();
+      self.full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
       self.send_heartbeat(is_file_saved)?;
     } else {
       debug!("Not sending heartbeat (no conditions met)");
@@ -506,10 +409,10 @@ impl<'a> Plugin {
     let full_path_string = full_path.clone().into_os_string().into_string().unwrap();
     let quoted_full_path = format!("\"{full_path_string}\"");
     let plugin_version = self.version;
-    let kicad_version = self.kicad.as_ref().unwrap().get_version().unwrap();
+    // TODO: populate again
+    let kicad_version = "unknown";
     let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/{plugin_version}\"");
     let api_key = self.get_api_key();
-    // TODO: api key validity check
     let quoted_api_key = format!("\"{api_key}\"");
     let language = self.language();
     let quoted_language = format!("\"{language}\"");

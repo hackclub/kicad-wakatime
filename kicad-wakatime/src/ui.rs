@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use eframe::egui::{self, Color32, RichText, TextEdit};
+use eframe::egui::{self, Color32, RichText};
 use egui_modal::Modal;
-use log::debug;
+// use log::debug;
 
 use crate::Plugin;
 
