@@ -1,7 +1,7 @@
 use core::str;
 use std::collections::HashMap;
-use std::fs;
-use std::io::{Cursor, Write};
+use std::fs::{self, File};
+use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -13,6 +13,7 @@ use log::info;
 use log::error;
 use log::warn;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
+use zip::ZipArchive;
 
 pub mod ui;
 pub mod traits;
@@ -87,7 +88,6 @@ impl<'a> Plugin {
     if !self.first_iteration_finished {
       self.check_up_to_date()?;
       self.check_cli_installed(self.redownload)?;
-      // self.connect_to_kicad()?;
       let projects_folder = self.get_projects_folder();
       self.watch_files(PathBuf::from(projects_folder.clone()))?;
     }
@@ -111,9 +111,14 @@ impl<'a> Plugin {
       "PCB Editor" => format!("{project}.kicad_pcb"),
       _ => String::new(),
     };
-    if !filename.is_empty() && self.get_full_path(filename.clone()).is_some() {
-      self.set_current_file(filename)?;
-    }
+    let Some(_full_path) = self.get_full_path(filename.clone()) else {
+      self.first_iteration_finished = true;
+      return Ok(());
+    };
+    // let project_folder = full_path.parent().unwrap().to_path_buf();
+    // let backups_folder = project_folder.join(format!("{project}-backups"));
+    self.set_current_file(filename.clone())?;
+    // self.look_at_backups_of_filename(filename, backups_folder);
     self.first_iteration_finished = true;
     Ok(())
   }
@@ -315,10 +320,44 @@ impl<'a> Plugin {
       // so self.maybe_send_heartbeat() can use the difference as a condition in its check
       info!("Filename: {}", filename.clone());
       self.maybe_send_heartbeat(filename.clone(), false)?;
-      debug!("filename = {:?}", self.filename.clone());
-      debug!("full_path = {:?}", self.full_path.clone());
+      debug!("self.filename = {:?}", self.filename.clone());
+      debug!("self.full_path = {:?}", self.full_path.clone());
     } else {
       // debug!("Focused file did not change!");
+    }
+    Ok(())
+  }
+  pub fn look_at_backups_of_filename(
+    &mut self,
+    filename: String,
+    backups_folder: PathBuf
+  ) -> Result<(), anyhow::Error> {
+    // get all backups from the backups folder sorted by creation time
+    info!("Looking at backups of {filename}...");
+    std::thread::sleep(Duration::from_millis(500));
+    let mut backups = fs::read_dir(backups_folder)?
+      .flatten()
+      .map(|x| x.path())
+      .collect::<Vec<_>>();
+    backups.sort_by_key(|x| x.metadata().unwrap().created().unwrap());
+    let backups_count = backups.len();
+    let mut v1: Vec<u8> = vec![];
+    let mut v2: Vec<u8> = vec![];
+    let p1 = &backups[backups_count - 1];
+    let p2 = &backups[backups_count - 2];
+    let f1 = File::open(p1)?;
+    let f2 = File::open(p2)?;
+    let mut newest_backup = ZipArchive::new(f1)?;
+    let mut second_newest_backup = ZipArchive::new(f2)?;
+    let mut newest_backup_of_filename = newest_backup.by_name(&filename)?;
+    let mut second_newest_backup_of_filename = second_newest_backup.by_name(&filename)?;
+    newest_backup_of_filename.read_to_end(&mut v1)?;
+    second_newest_backup_of_filename.read_to_end(&mut v2)?;
+    if v1.ne(&v2) {
+      info!("Change detected!");
+      self.maybe_send_heartbeat(filename, false)?;
+    } else {
+      info!("No change detected!");
     }
     Ok(())
   }
@@ -341,14 +380,17 @@ impl<'a> Plugin {
   pub fn try_recv(&mut self) -> Result<(), anyhow::Error> {
     let Some(ref rx) = self.rx else { unreachable!(); };
     let recv = rx.try_recv();
-    if recv.is_ok() { // watched file was saved
+    if recv.is_ok() {
       if let Ok(Ok(notify::Event { kind, paths, attrs: _ })) = recv {
-        debug!("notify::Event {{ kind: {:?}, paths: {:?} }}", kind, paths);
-        if !paths.contains(&self.full_path) {
-          return Ok(())
+        let path = paths[0].clone();
+        let is_backup = path.parent().unwrap().to_str().unwrap().ends_with("-backups");
+        if path == self.full_path {
+          info!("File saved!");
+          self.maybe_send_heartbeat(self.filename.clone(), true)?;
+        } else if is_backup && kind.is_create() {
+          info!("New backup created!");
+          self.look_at_backups_of_filename(self.filename.clone(), path.parent().unwrap().to_path_buf())?;
         }
-        info!("File saved!");
-        self.maybe_send_heartbeat(self.filename.clone(), true)?;
       }
     }
     Ok(())
