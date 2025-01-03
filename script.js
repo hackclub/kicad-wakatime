@@ -13,10 +13,10 @@ const e_download_kicad_href = os == 'windows' ? 'https://downloads.kicad.org/kic
   : os == 'macos' ? 'https://downloads.kicad.org/kicad/macos/explore/nightlies'
   : os == 'linux' ? 'https://www.kicad.org/download/linux'
   : null;
-const e_download_kicad_wakatime_href = os == 'windows' ? 'https://github.com/hackclub/kicad-wakatime/releases/download/0.1.2/kicad-wakatime-0.1.2-windows.zip'
-  : os == 'macos' ? 'https://github.com/hackclub/kicad-wakatime/releases/download/0.1.2/kicad-wakatime-0.1.2-macos.zip'
-  : os == 'linux' ? 'https://github.com/hackclub/kicad-wakatime/releases/download/0.1.2/kicad-wakatime-0.1.2-linux.zip'
-  : 'https://github.com/hackclub/kicad-wakatime/releases/tag/0.1.2'
+const e_download_kicad_wakatime_href = os == 'windows' ? 'https://github.com/hackclub/kicad-wakatime/releases/download/0.2.0/kicad-wakatime-0.2.0-windows.zip'
+  : os == 'macos' ? 'https://github.com/hackclub/kicad-wakatime/releases/download/0.2.0/kicad-wakatime-0.2.0-macos.zip'
+  : os == 'linux' ? 'https://github.com/hackclub/kicad-wakatime/releases/download/0.2.0/kicad-wakatime-0.2.0-linux.zip'
+  : 'https://github.com/hackclub/kicad-wakatime/releases/tag/0.2.0'
 
 document.getElementById('os').innerHTML = os;
 
