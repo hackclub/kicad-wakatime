@@ -7,14 +7,13 @@ use eframe::egui::{self};
 // use cocoa::appkit::NSApp;
 // use cocoa::appkit::NSApplication;
 // use cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular;
-use kicad_wakatime::{ui::Ui, traits::DebugProcesses, Plugin};
+use kicad_wakatime::{ui::Ui, Plugin};
 use clap::Parser;
 use log::debug;
 use log::error;
 use log::info;
 // use log::warn;
 use multi_log::MultiLogger;
-use sysinfo::System;
 
 /// WakaTime plugin for KiCAD nightly
 #[derive(Parser)]
@@ -63,10 +62,6 @@ fn main() -> Result<(), anyhow::Error> {
   #[cfg(target_os = "macos")]
   core_graphics::access::ScreenCaptureAccess::default().request();
 
-  let mut sys = System::new_all();
-  sys.refresh_all();
-  sys.debug_processes();
-
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 
   let native_options = eframe::NativeOptions {
@@ -94,9 +89,7 @@ fn main() -> Result<(), anyhow::Error> {
     native_options,
     move |ctx, _frame| {
       plugin.draw_ui(ctx, _frame);
-      sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-      // have to handle the error case this way since the callback to add_idle3
-      // does not return Result
+      // have to handle the error case this way since the callback does not return Result
       match plugin.main_loop() {
         Ok(_) => {},
         Err(e) => {

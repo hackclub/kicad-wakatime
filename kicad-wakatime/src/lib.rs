@@ -16,7 +16,6 @@ use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use zip::ZipArchive;
 
 pub mod ui;
-pub mod traits;
 
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
