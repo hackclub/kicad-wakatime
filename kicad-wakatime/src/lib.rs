@@ -17,7 +17,7 @@ use zip::ZipArchive;
 
 pub mod ui;
 
-const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const PLUGIN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct Plugin {
   pub version: &'static str,
@@ -46,7 +46,7 @@ pub struct Plugin {
   pub first_iteration_finished: bool,
 }
 
-impl<'a> Plugin {
+impl Plugin {
   pub fn new(
     disable_heartbeats: bool,
     redownload: bool,
@@ -79,7 +79,7 @@ impl<'a> Plugin {
       self.check_up_to_date()?;
       self.check_cli_installed(self.redownload)?;
       let projects_folder = self.get_projects_folder();
-      self.watch_files(PathBuf::from(projects_folder.clone()))?;
+      self.watch_files(projects_folder.clone())?;
     }
     self.set_current_time(self.current_time());
     let Ok(w) = self.get_active_window() else {
@@ -117,7 +117,7 @@ impl<'a> Plugin {
     // as far as i can tell, active_win_pos_rs will focus on kicad-wakatime
     // when it starts, and that window should by all means have a title.
     // if the field is empty, kicad-wakatime is missing permissions
-    if active_window.clone().is_ok_and(|w| w.app_name == "kicad-wakatime" && w.title == "") {
+    if active_window.clone().is_ok_and(|w| w.app_name == "kicad-wakatime" && w.title.is_empty()) {
       error!("Could not get title of active window!");
       error!("If you are on macOS, please give kicad-wakatime Screen Recording permission");
       error!("(System Settings -> Privacy and Security -> Screen Recording)");
@@ -191,7 +191,7 @@ impl<'a> Plugin {
     let asset = json["assets"]
       .as_array()
       .unwrap()
-      .into_iter()
+      .iter()
       .find(|v| v["name"].as_str().unwrap().to_owned() == self.cli_zip_name(env_consts()))
       .unwrap();
     let download_url = asset["browser_download_url"].as_str().unwrap().to_owned();
@@ -455,12 +455,12 @@ impl<'a> Plugin {
     // create process
     let cli_path = self.cli_path(env_consts());
     let mut cli = std::process::Command::new(cli_path);
-    cli.args(&["--entity", &quoted_full_path]);
-    cli.args(&["--plugin", &quoted_user_agent]);
-    cli.args(&["--key", &quoted_api_key]);
-    cli.args(&["--api-url", &quoted_api_url]);
-    cli.args(&["--language", &quoted_language]);
-    cli.args(&["--project", &file_stem]);
+    cli.args(["--entity", &quoted_full_path]);
+    cli.args(["--plugin", &quoted_user_agent]);
+    cli.args(["--key", &quoted_api_key]);
+    cli.args(["--api-url", &quoted_api_url]);
+    cli.args(["--language", &quoted_language]);
+    cli.args(["--project", &file_stem]);
     if is_file_saved {
       cli.arg("--write");
     }
