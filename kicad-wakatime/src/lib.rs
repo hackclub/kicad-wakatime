@@ -127,9 +127,15 @@ impl Plugin {
   pub fn check_cli_installed(&mut self, redownload: bool) -> Result<(), anyhow::Error> {
     let cli_path = self.cli_path(env_consts());
     info!("WakaTime CLI path: {:?}", cli_path);
-    if fs::exists(cli_path)? {
-      info!("File exists!");
+    if fs::exists(cli_path.clone())? {
+      let mut cli = std::process::Command::new(cli_path);
+      cli.arg("--version");
+      let cli_output = cli.output()
+        .expect("Could not execute WakaTime CLI!");
+      let cli_stdout = cli_output.stdout;
+      let cli_stdout = std::str::from_utf8(&cli_stdout)?;
       // TODO: update to latest version if needed
+      info!("WakaTime CLI version: {cli_stdout}");
     } else {
       info!("File does not exist!");
       self.get_latest_release()?;
@@ -171,7 +177,6 @@ impl Plugin {
     Ok(())
   }
   pub fn get_latest_release(&mut self) -> Result<(), anyhow::Error> {
-    // TODO: share
     let client = reqwest::blocking::Client::new();
     // need to insert some kind of user agent to avoid getting 403 forbidden
     let mut headers = reqwest::header::HeaderMap::new();
@@ -470,7 +475,7 @@ impl Plugin {
     let cli_status = cli_output.status;
     let cli_stdout = cli_output.stdout;
     let cli_stderr = cli_output.stderr;
-    // TODO: handle failing statuses
+    // TODO: handle failing statuses (102/112, 103, 104)
     debug!("cli_status = {cli_status}");
     debug!("cli_stdout = {:?}", str::from_utf8(&cli_stdout).unwrap());
     debug!("cli_stderr = {:?}", str::from_utf8(&cli_stderr).unwrap());
