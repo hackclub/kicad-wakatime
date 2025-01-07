@@ -43,6 +43,7 @@ pub struct Plugin {
   pub last_sent_time_chrono: Option<DateTime<Local>>,
   // the last file that was sent
   pub last_sent_file: String,
+  pub has_screen_capture_access: bool,
   pub first_iteration_finished: bool,
 }
 
@@ -71,6 +72,7 @@ impl Plugin {
       last_sent_time: Duration::default(),
       last_sent_time_chrono: None,
       last_sent_file: String::default(),
+      has_screen_capture_access: true,
       first_iteration_finished: false,
     }
   }
@@ -117,10 +119,12 @@ impl Plugin {
     // as far as i can tell, active_win_pos_rs will focus on kicad-wakatime
     // when it starts, and that window should by all means have a title.
     // if the field is empty, kicad-wakatime is missing permissions
-    if active_window.clone().is_ok_and(|w| w.app_name == "kicad-wakatime" && w.title.is_empty()) {
-      error!("Could not get title of active window!");
-      error!("If you are on macOS, please give kicad-wakatime Screen Recording permission");
-      error!("(System Settings -> Privacy and Security -> Screen Recording)");
+    if !self.has_screen_capture_access {
+      if active_window.clone().is_ok_and(|w| w.app_name == "kicad-wakatime" && w.title.is_empty()) {
+        error!("Could not get title of active window!");
+        error!("If you are on macOS, please give kicad-wakatime Screen Recording permission");
+        error!("(System Settings -> Privacy and Security -> Screen Recording)");
+      }
     }
     active_window
   }

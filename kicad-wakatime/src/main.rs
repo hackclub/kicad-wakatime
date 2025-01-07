@@ -59,9 +59,6 @@ fn main() -> Result<(), anyhow::Error> {
 
   debug!("(os, arch) = {:?}", kicad_wakatime::env_consts());
 
-  #[cfg(target_os = "macos")]
-  core_graphics::access::ScreenCaptureAccess::default().request();
-
   let (tx, rx) = std::sync::mpsc::channel::<Result<notify::Event, notify::Error>>();
 
   let native_options = eframe::NativeOptions {
@@ -77,6 +74,15 @@ fn main() -> Result<(), anyhow::Error> {
   info!("Initializing kicad-wakatime...");
   plugin.tx = Some(tx);
   plugin.rx = Some(rx);
+
+  #[cfg(target_os = "macos")]
+  {
+    let screen_capture_access = core_graphics::access::ScreenCaptureAccess::default();
+    plugin.has_screen_capture_access = screen_capture_access.preflight();
+    if !plugin.has_screen_capture_access {
+      screen_capture_access.request();
+    }
+  }
 
   // settings population
   plugin.load_config()?;
