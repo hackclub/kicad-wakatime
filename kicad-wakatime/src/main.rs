@@ -79,7 +79,7 @@ fn main() -> Result<(), anyhow::Error> {
   plugin.rx = Some(rx);
 
   // settings population
-  plugin.load_config();
+  plugin.load_config()?;
   plugin.projects_folder = plugin.get_projects_folder().to_str().unwrap().to_string();
   plugin.api_key = plugin.get_api_key();
   plugin.api_url = plugin.get_api_url();
@@ -88,8 +88,14 @@ fn main() -> Result<(), anyhow::Error> {
     "kicad-wakatime ^_^",
     native_options,
     move |ctx, _frame| {
-      plugin.draw_ui(ctx, _frame);
       // have to handle the error case this way since the callback does not return Result
+      match plugin.draw_ui(ctx, _frame) {
+        Ok(_) => {},
+        Err(e) => {
+          error!("{:?}", e);
+          plugin.first_iteration_finished = true;
+        }
+      };
       match plugin.main_loop() {
         Ok(_) => {},
         Err(e) => {

@@ -218,23 +218,25 @@ impl<'a> Plugin {
     info!("Finished!");
     Ok(())
   }
-  pub fn load_config(&mut self) {
+  pub fn load_config(&mut self) -> Result<(), anyhow::Error> {
     // wakatime config
     let wakatime_cfg_path = self.wakatime_cfg_path();
     if !fs::exists(&wakatime_cfg_path).unwrap() {
-      Ini::new().write_to_file(&wakatime_cfg_path);
+      Ini::new().write_to_file(&wakatime_cfg_path)?;
     }
     self.wakatime_config = Ini::load_from_file(&wakatime_cfg_path).unwrap();
     // kicad-wakatime config
     let kicad_wakatime_cfg_path = self.kicad_wakatime_cfg_path();
     if !fs::exists(&kicad_wakatime_cfg_path).unwrap() {
-      Ini::new().write_to_file(&kicad_wakatime_cfg_path);
+      Ini::new().write_to_file(&kicad_wakatime_cfg_path)?;
     }
     self.kicad_wakatime_config = Ini::load_from_file(&kicad_wakatime_cfg_path).unwrap();
+    Ok(())
   }
-  pub fn store_config(&self) {
-    Ini::write_to_file(&self.wakatime_config, self.wakatime_cfg_path());
-    Ini::write_to_file(&self.kicad_wakatime_config, self.kicad_wakatime_cfg_path());
+  pub fn store_config(&self) -> Result<(), anyhow::Error> {
+    Ini::write_to_file(&self.wakatime_config, self.wakatime_cfg_path())?;
+    Ini::write_to_file(&self.kicad_wakatime_config, self.kicad_wakatime_cfg_path())?;
+    Ok(())
   }
   pub fn set_api_key(&mut self, api_key: String) {
     self.wakatime_config.with_section(Some("settings"))

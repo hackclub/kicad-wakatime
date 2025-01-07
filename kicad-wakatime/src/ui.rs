@@ -7,11 +7,11 @@ use egui_modal::Modal;
 use crate::Plugin;
 
 pub trait Ui {
-  fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame);
+  fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) -> Result<(), anyhow::Error>;
 }
 
 impl Ui for Plugin {
-  fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+  fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) -> Result<(), anyhow::Error> {
     let projects_folder = self.get_projects_folder();
     let api_key = self.get_api_key();
     let api_url = self.get_api_url();
@@ -28,7 +28,8 @@ impl Ui for Plugin {
     };
     // settings window
     let modal = Modal::new(ctx, "settings");
-    modal.show(|ui| {
+    // luckily this call has a generic for the return type!
+    modal.show(|ui| -> Result<(), anyhow::Error> {
       ui.label(RichText::new("kicad-wakatime settings ^w^").size(16.0));
       ui.add_space(10.0);
       ui.label("track ALL projects in this folder:");
@@ -47,10 +48,11 @@ impl Ui for Plugin {
         self.set_projects_folder(self.projects_folder.clone());
         self.set_api_key(self.api_key.clone());
         self.set_api_url(self.api_url.clone());
-        self.store_config();
-        self.watch_files(PathBuf::from(self.projects_folder.clone()));
+        self.store_config()?;
+        self.watch_files(PathBuf::from(self.projects_folder.clone()))?;
         modal.close();
       }
+      Ok(())
     });
     // main window
     egui::CentralPanel::default().show(ctx, |ui| {
@@ -67,5 +69,6 @@ impl Ui for Plugin {
         .error_color(Color32::RED)
         .show(ui);
     });
+    Ok(())
   }
 }
