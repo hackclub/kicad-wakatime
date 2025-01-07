@@ -15,7 +15,7 @@ use log::info;
 // use log::warn;
 use multi_log::MultiLogger;
 
-/// WakaTime plugin for KiCAD nightly
+/// WakaTime plugin for KiCAD
 #[derive(Parser)]
 pub struct Args {
   #[clap(long)]
