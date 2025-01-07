@@ -422,7 +422,6 @@ impl<'a> Plugin {
     } else {
       debug!("It has been {:?} since the last heartbeat", self.time_passed());
     }
-    // TODO: ????
     if self.time_passed() < Duration::from_millis(1000) {
       debug!("Not sending heartbeat (too fast!)");
       return Ok(())
@@ -456,18 +455,18 @@ impl<'a> Plugin {
     let quoted_user_agent = format!("\"kicad/{kicad_version} kicad-wakatime/{plugin_version}\"");
     let api_key = self.get_api_key();
     let quoted_api_key = format!("\"{api_key}\"");
+    let api_url = self.get_api_url();
+    let quoted_api_url = format!("\"{api_url}\"");
     let language = self.language();
     let quoted_language = format!("\"{language}\"");
     let file_stem = full_path.clone().file_stem().unwrap().to_str().unwrap().to_string();
-    // TODO: metrics?
-    // TODO: api_url?
-    // TODO: is_unsaved_entity
     // create process
     let cli_path = self.cli_path(env_consts());
     let mut cli = std::process::Command::new(cli_path);
     cli.args(&["--entity", &quoted_full_path]);
     cli.args(&["--plugin", &quoted_user_agent]);
     cli.args(&["--key", &quoted_api_key]);
+    cli.args(&["--api-url", &quoted_api_url]);
     cli.args(&["--language", &quoted_language]);
     cli.args(&["--project", &file_stem]);
     if is_file_saved {
