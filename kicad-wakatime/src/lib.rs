@@ -18,8 +18,6 @@ use zip::ZipArchive;
 pub mod ui;
 pub mod traits;
 
-// use ui::{Message, Ui};
-
 const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct Plugin {
@@ -29,13 +27,8 @@ pub struct Plugin {
   pub wakatime_config: Ini,
   pub kicad_wakatime_config: Ini,
   pub settings_open: bool,
-  // pub ui: ui::App,
-  // pub active_window: ActiveWindow,
   pub tx: Option<Sender<notify::Result<notify::Event>>>,
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
-  // pub kicad: Option<KiCad>,
-  // TODO: open an issue for help uncommenting this field
-  // pub board: Option<Board<'a>>,
   // filename of currently focused file
   pub filename: String,
   // path of currently focused file
@@ -45,7 +38,6 @@ pub struct Plugin {
   pub projects_folder: String,
   pub api_key: String,
   pub api_url: String,
-  // pub items: HashMap<KiCadObjectType, Vec<BoardItem>>,
   pub time: Duration,
   // the last time a heartbeat was sent
   pub last_sent_time: Duration,
@@ -67,7 +59,6 @@ impl<'a> Plugin {
       wakatime_config: Ini::default(),
       kicad_wakatime_config: Ini::default(),
       settings_open: false,
-      // ui: ui::App::default(),
       tx: None,
       rx: None,
       filename: String::default(),
