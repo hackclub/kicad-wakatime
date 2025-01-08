@@ -88,6 +88,7 @@ impl Plugin {
       self.first_iteration_finished = true;
       return Ok(());
     };
+    // TODO: maybe a regex would be way better for what we're about to do?
     // note: written this way, split can be Some for some things that aren't KiCAD, e.g. VS Code.
     // we sanity check it later.
     let split = w.title.split_once(" — ");
@@ -95,9 +96,15 @@ impl Plugin {
       self.first_iteration_finished = true;
       return Ok(());
     };
+    // deal with unsaved files
     if project.starts_with("*") {
       project = &project[1..project.len()];
     }
+    // deal with hierarchical schematics
+    project = match (project.find("["), project.find("]")) {
+      (Some(left), Some(_right)) => &project[0..left-1],
+      _ => project,
+    };
     let filename = match editor {
       "Schematic Editor" => format!("{project}.kicad_sch"),
       "PCB Editor" => format!("{project}.kicad_pcb"),
