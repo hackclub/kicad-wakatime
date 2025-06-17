@@ -2,6 +2,12 @@
 
 **kicad-wakatime** is a WakaTime plugin for [KiCAD](https://www.kicad.org/).
 
+## Disclaimer
+As of June 2025, **this plugin is likely not suitable for accurate time tracking.**\
+After freezing the codebase in January 2025, [@lux](https://github.com/sporeball) was asked to step down as core maintainer of the plugin in order to focus on other projects, leaving multiple critical bugs in the most recent release unaddressed ([1](https://github.com/hackclub/kicad-wakatime/issues/16), [2](https://github.com/hackclub/kicad-wakatime/issues/17)).\
+This repository will remain public, but until it can be improved upon by [@lux](https://github.com/sporeball) or by a new core maintainer, its use is discouraged.\
+**Proceed at your own risk.**
+
 ## Installation
 
 On all platforms:
