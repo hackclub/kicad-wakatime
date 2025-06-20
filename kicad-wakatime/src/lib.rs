@@ -30,6 +30,8 @@ pub struct Plugin {
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
   // filename of currently focused file
   pub filename: String,
+  pub symbol: String,
+  pub footprint: String,
   // path of currently focused file
   pub full_path: PathBuf,
   pub full_paths: HashMap<String, PathBuf>,
@@ -62,6 +64,8 @@ impl Plugin {
       tx: None,
       rx: None,
       filename: String::default(),
+      symbol: String::default(),
+      footprint: String::default(),
       full_path: PathBuf::default(),
       full_paths: HashMap::default(),
       file_watcher: None,
@@ -101,13 +105,18 @@ impl Plugin {
       project = &project[1..project.len()];
     }
     // deal with hierarchical schematics
-    project = match (project.find("["), project.find("]")) {
-      (Some(left), Some(_right)) => &project[0..left-1],
-      _ => project,
-    };
+    if project.find("[") == Some(0) {
+        error!("Can't find [ in project {}! Skipping", project);
+        return Ok(());
+    }
+
+    let symbol_dir = &self.symbol;
+    let footprint_dir = &self.footprint;
     let filename = match editor {
       "Schematic Editor" => format!("{project}.kicad_sch"),
       "PCB Editor" => format!("{project}.kicad_pcb"),
+      "Symbol Editor" => format!("{symbol_dir}.kicad_sym"),
+      "Footprint Editor" => format!("{footprint_dir}/{project}.kicad_mod"),
       _ => String::new(),
     };
     let Some(_full_path) = self.get_full_path(filename.clone()) else {
@@ -357,15 +366,22 @@ impl Plugin {
     let f2 = File::open(p2)?;
     let mut newest_backup = ZipArchive::new(f1)?;
     let mut second_newest_backup = ZipArchive::new(f2)?;
-    let mut newest_backup_of_filename = newest_backup.by_name(&filename)?;
-    let mut second_newest_backup_of_filename = second_newest_backup.by_name(&filename)?;
-    newest_backup_of_filename.read_to_end(&mut v1)?;
-    second_newest_backup_of_filename.read_to_end(&mut v2)?;
-    if v1.ne(&v2) {
-      info!("Change detected!");
-      self.maybe_send_heartbeat(filename, false)?;
+
+    if let Ok(mut newest_backup_of_filename) = newest_backup.by_name(&filename) {
+        if let Ok(mut second_newest_backup_of_filename) = second_newest_backup.by_name(&filename) {
+            newest_backup_of_filename.read_to_end(&mut v1)?;
+            second_newest_backup_of_filename.read_to_end(&mut v2)?;
+            if v1.ne(&v2) {
+              info!("Change detected!");
+              self.maybe_send_heartbeat(filename, false)?;
+            } else {
+              info!("No change detected!");
+            }
+        } else {
+            error!("Error getting file in backup!");
+        }
     } else {
-      info!("No change detected!");
+        error!("Error getting file in backup!");
     }
     Ok(())
   }

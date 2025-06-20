@@ -4,7 +4,7 @@
 
 ## Disclaimer
 As of June 2025, **this plugin is likely not suitable for accurate time tracking**.\
-This is due to a couple of critical bugs affecting the core behavior of the latest release ([1](https://github.com/hackclub/kicad-wakatime/issues/16), [2](https://github.com/hackclub/kicad-wakatime/issues/17)).\
+This is due to a couple of critical bugs affecting the core behavior of the latest release ([1](https://github.com/hackclub/kicad-wakatime/issues/17)).\
 **Proceed at your own risk.**
 
 ## Installation
@@ -34,6 +34,12 @@ If you are an Ubuntu user, you can install KiCAD 8.99 using the following shell 
 sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
 sudo apt update
 sudo apt install kicad-nightly
+```
+
+If you are on Wayland, open kicad using the following command:
+
+```shell
+GDK_BACKEND=x11 kicad
 ```
 
 </details>

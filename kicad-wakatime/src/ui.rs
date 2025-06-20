@@ -44,6 +44,10 @@ impl Ui for Plugin {
       ui.text_edit_singleline(&mut self.api_key);
       ui.label("API URL:");
       ui.text_edit_singleline(&mut self.api_url);
+      ui.label("Symbol Library Name:");
+      ui.text_edit_singleline(&mut self.symbol);
+      ui.label("Footprint Library Path:");
+      ui.text_edit_singleline(&mut self.footprint);
       if ui.button("OK").clicked() {
         self.set_projects_folder(self.projects_folder.clone());
         self.set_api_key(self.api_key.clone());
