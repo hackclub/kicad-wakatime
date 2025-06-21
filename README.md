@@ -4,7 +4,7 @@
 
 ## Disclaimer
 As of June 2025, **this plugin is likely not suitable for accurate time tracking**.\
-This is due to a couple of critical bugs affecting the core behavior of the latest release ([1](https://github.com/hackclub/kicad-wakatime/issues/16), [2](https://github.com/hackclub/kicad-wakatime/issues/17)).\
+This is due to a couple of critical bugs affecting the core behavior of the latest release ([1](https://github.com/hackclub/kicad-wakatime/issues/17)).\
 **Proceed at your own risk.**
 
 ## Installation
@@ -35,6 +35,14 @@ sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
 sudo apt update
 sudo apt install kicad-nightly
 ```
+
+If you are on Wayland, open kicad using the following command:
+
+```shell
+GDK_BACKEND=x11 kicad
+```
+
+This solution only works if xwayland is running and supported by the compositor. This works by default on most compositors, but if it isn't check out https://github.com/Supreeeme/xwayland-satellite
 
 </details>
 
