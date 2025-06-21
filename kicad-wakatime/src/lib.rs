@@ -14,6 +14,8 @@ use log::error;
 use log::warn;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use zip::ZipArchive;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 pub mod ui;
 
@@ -141,6 +143,10 @@ impl Plugin {
     if fs::exists(cli_path.clone())? {
       let mut cli = std::process::Command::new(cli_path);
       cli.arg("--version");
+      #[cfg(windows)]
+      {
+        cli.creation_flags(0x08000000); // CREATE_NO_WINDOW
+      }
       let cli_output = cli.output()
         .expect("Could not execute WakaTime CLI!");
       let cli_stdout = cli_output.stdout;
@@ -479,6 +485,10 @@ impl Plugin {
     cli.args(["--project", &file_stem]);
     if is_file_saved {
       cli.arg("--write");
+    }
+    #[cfg(windows)]
+    {
+      cli.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     info!("Executing WakaTime CLI...");
     let cli_output = cli.output()
