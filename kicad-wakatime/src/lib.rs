@@ -86,18 +86,27 @@ impl Plugin {
       self.check_cli_installed(self.redownload)?;
       let projects_folder = self.get_projects_folder();
       self.watch_files(projects_folder.clone())?;
+      info!("Finished setting up");
     }
+
     self.set_current_time(self.current_time());
     let Ok(w) = self.get_active_window() else {
       self.first_iteration_finished = true;
       return Ok(());
     };
+
+    if w.title == "Pin Properties" {
+        // TODO
+        // self.send_heartbeat(false)?;
+    }
+
     // TODO: maybe a regex would be way better for what we're about to do?
     // note: written this way, split can be Some for some things that aren't KiCAD, e.g. VS Code.
     // we sanity check it later.
     let split = w.title.split_once(" — ");
     let Some((mut project, editor)) = split else {
       self.first_iteration_finished = true;
+      warn!("Coutldn't split the title {} at -", w.title);
       return Ok(());
     };
     // deal with unsaved files
@@ -115,14 +124,27 @@ impl Plugin {
     let filename = match editor {
       "Schematic Editor" => format!("{project}.kicad_sch"),
       "PCB Editor" => format!("{project}.kicad_pcb"),
-      "Symbol Editor" => format!("{symbol_dir}.kicad_sym"),
+      "Symbol Editor" => format!("{symbol_dir}"),
       "Footprint Editor" => format!("{footprint_dir}/{project}.kicad_mod"),
       _ => String::new(),
     };
-    let Some(_full_path) = self.get_full_path(filename.clone()) else {
-      self.first_iteration_finished = true;
-      return Ok(());
-    };
+
+    if (editor != "Symbol Editor" && editor != "Footprint Editor") || filename == "" {
+      let Some(_full_path) = self.get_full_path(filename.clone()) else {
+        if filename == "" {
+          match editor {
+              "Symbol Editor" => warn!("Symbol file path empty, did you forget to set it?"),
+              "Footprint Editor" => warn!("Footprint directory path empty, did you forget to set it?"),
+              _ => warn!("Can't get full path of {}", filename),
+          }
+        } else {
+          warn!("Can't get full path of {}", filename);
+        }
+
+        self.first_iteration_finished = true;
+        return Ok(());
+      };
+    }
     // let project_folder = full_path.parent().unwrap().to_path_buf();
     // let backups_folder = project_folder.join(format!("{project}-backups"));
     self.set_current_file(filename.clone())?;
@@ -293,12 +315,37 @@ impl Plugin {
       None => PathBuf::new(),
     }
   }
+  pub fn set_symbol_file(&mut self, projects_folder: String) {
+    self.kicad_wakatime_config.with_section(Some("settings"))
+      .set("symbol_file", projects_folder);
+  }
+  pub fn get_symbol_file(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("symbol_file") {
+      Some(projects_folder) => PathBuf::from(projects_folder),
+      None => PathBuf::new(),
+    }
+  }
+  pub fn set_footprint_folder(&mut self, projects_folder: String) {
+    self.kicad_wakatime_config.with_section(Some("settings"))
+      .set("footprint_folder", projects_folder);
+  }
+  pub fn get_footprint_folder(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("footprint_folder") {
+      Some(projects_folder) => PathBuf::from(projects_folder),
+      None => PathBuf::new(),
+    }
+  }
   pub fn language(&self) -> String {
     if self.filename.ends_with(".kicad_sch") {
       String::from("KiCAD Schematic")
     } else if self.filename.ends_with(".kicad_pcb") {
       String::from("KiCAD PCB")
+    } else if self.filename.ends_with(".kicad_sym") {
+      String::from("KiCAD Symbol")
+    } else if self.filename.ends_with(".kicad_mod") {
+      String::from("KiCAD Footprint")
     } else {
+      error!("Unknown language for {}", self.filename);
       unreachable!()
     }
   }
@@ -454,7 +501,12 @@ impl Plugin {
     self.enough_time_passed() ||
     self.filename != filename {
       self.filename = filename.clone();
-      self.full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
+      self.full_path = if filename.ends_with(".kicad_sym") || filename.ends_with(".kicad_mod") {
+        PathBuf::from(filename)
+      } else {
+        self.get_full_path(filename.clone()).unwrap().to_path_buf()
+      };
+
       self.send_heartbeat(is_file_saved)?;
     } else {
       debug!("Not sending heartbeat (no conditions met)");

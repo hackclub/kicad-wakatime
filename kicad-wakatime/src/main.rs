@@ -89,6 +89,8 @@ fn main() -> Result<(), anyhow::Error> {
   // settings population
   plugin.load_config()?;
   plugin.projects_folder = plugin.get_projects_folder().to_str().unwrap().to_string();
+  plugin.symbol = plugin.get_symbol_file().to_str().unwrap().to_string();
+  plugin.footprint = plugin.get_footprint_folder().to_str().unwrap().to_string();
   plugin.api_key = plugin.get_api_key();
   plugin.api_url = plugin.get_api_url();
 

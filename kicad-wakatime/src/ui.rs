@@ -40,17 +40,31 @@ impl Ui for Plugin {
           self.projects_folder = path.to_str().unwrap().to_string();
         }
       }
+
+      ui.label("Symbol Library File:");
+      ui.monospace(format!("{:?}", self.symbol));
+      if ui.button("select folder").clicked() {
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
+          self.symbol = path.to_str().unwrap().to_string();
+        }
+      }
+      ui.label("Footprint Library Path:");
+      ui.monospace(format!("{:?}", self.footprint));
+      if ui.button("select folder").clicked() {
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+          self.footprint = path.to_str().unwrap().to_string();
+        }
+      }
+
       ui.label("API key:");
       ui.text_edit_singleline(&mut self.api_key);
       ui.label("API URL:");
       ui.text_edit_singleline(&mut self.api_url);
-      // Not needed?
-      // ui.label("Symbol Library Name:");
-      // ui.text_edit_singleline(&mut self.symbol);
-      // ui.label("Footprint Library Path:");
-      // ui.text_edit_singleline(&mut self.footprint);
+
       if ui.button("OK").clicked() {
         self.set_projects_folder(self.projects_folder.clone());
+        self.set_symbol_file(self.symbol.clone());
+        self.set_footprint_folder(self.footprint.clone());
         self.set_api_key(self.api_key.clone());
         self.set_api_url(self.api_url.clone());
         self.store_config()?;
