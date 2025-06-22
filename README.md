@@ -13,6 +13,8 @@ If you know what you're doing, you can build kicad-wakatime from the main branch
 
 The code in the main branch should be considered unstable, as some features may still be in progress between releases.
 
+Issues: When using hierarchy sheets, kicad-wakatime will create a project for each sheet. Just select all the projects in SoM.
+
 ## Usage
 
 Open `kicad-wakatime` and `kicad`. Click on "settings" in kicad wakatime and enter your API key. (Should be auto-filled if you have already installed hackatime)
