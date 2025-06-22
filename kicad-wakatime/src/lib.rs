@@ -113,7 +113,6 @@ impl Plugin {
     if project.starts_with("*") {
       project = &project[1..project.len()];
     }
-    // deal with hierarchical schematics
     if project.find("[") == Some(0) {
         error!("Can't find [ in project {}! Skipping", project);
         return Ok(());
@@ -121,13 +120,18 @@ impl Plugin {
 
     let symbol_dir = &self.symbol;
     let footprint_dir = &self.footprint;
-    let filename = match editor {
+    let mut filename = match editor {
       "Schematic Editor" => format!("{project}.kicad_sch"),
       "PCB Editor" => format!("{project}.kicad_pcb"),
       "Symbol Editor" => format!("{symbol_dir}"),
       "Footprint Editor" => format!("{footprint_dir}/{project}.kicad_mod"),
       _ => String::new(),
     };
+
+    if editor == "Schematic Editor" && filename.contains('[') {
+        let name = filename.split(' ').collect::<Vec<_>>()[0];
+        filename = format!("{name}.kicad_sch");
+    }
 
     if (editor != "Symbol Editor" && editor != "Footprint Editor") || filename == "" {
       let Some(_full_path) = self.get_full_path(filename.clone()) else {
