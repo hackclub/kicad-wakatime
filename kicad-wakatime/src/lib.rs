@@ -429,10 +429,10 @@ impl Plugin {
               info!("No change detected!");
             }
         } else {
-            error!("Error getting file in backup!");
+            error!("Error getting {} in backup!", filename);
         }
     } else {
-        error!("Error getting file in backup!");
+        error!("Error getting {} in backup!", filename);
     }
     Ok(())
   }
