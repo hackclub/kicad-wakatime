@@ -42,6 +42,12 @@ If you are on Wayland, open kicad using the following command:
 GDK_BACKEND=x11 kicad
 ```
 
+or if you installed the flatpak:
+
+```shell
+flatpak override --env=GDK_BACKEND=x11 org.kicad.KiCad
+```
+
 This solution only works if xwayland is running and supported by the compositor. This works by default on most compositors, but if it isn't check out https://github.com/Supreeeme/xwayland-satellite
 
 </details>
