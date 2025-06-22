@@ -43,14 +43,14 @@ impl Ui for Plugin {
 
       ui.label("Symbol Library File:");
       ui.monospace(format!("{:?}", self.symbol));
-      if ui.button("select folder").clicked() {
+      if ui.button("select .kicad_sym file").clicked() {
         if let Some(path) = rfd::FileDialog::new().pick_file() {
           self.symbol = path.to_str().unwrap().to_string();
         }
       }
       ui.label("Footprint Library Path:");
       ui.monospace(format!("{:?}", self.footprint));
-      if ui.button("select folder").clicked() {
+      if ui.button("select folder containing .kicad_mod files").clicked() {
         if let Some(path) = rfd::FileDialog::new().pick_folder() {
           self.footprint = path.to_str().unwrap().to_string();
         }
