@@ -133,6 +133,7 @@ impl Plugin {
       "PCB Editor" => format!("{project}.kicad_pcb"),
       "Symbol Editor" => format!("{symbol_dir}"),
       "Footprint Editor" => format!("{footprint_dir}/{project}.kicad_mod"),
+      "KiCad 9.0" => return Ok(()),
       _ => String::new(),
     };
 
