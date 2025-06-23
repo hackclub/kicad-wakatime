@@ -32,6 +32,7 @@ pub struct Plugin {
   pub filename: String,
   pub symbol: String,
   pub footprint: String,
+  pub warned: String,
   // path of currently focused file
   pub full_path: PathBuf,
   pub full_paths: HashMap<String, PathBuf>,
@@ -66,6 +67,7 @@ impl Plugin {
       filename: String::default(),
       symbol: String::default(),
       footprint: String::default(),
+      warned: String::default(),
       full_path: PathBuf::default(),
       full_paths: HashMap::default(),
       file_watcher: None,
@@ -106,13 +108,19 @@ impl Plugin {
     let split = w.title.split_once(" — ");
     let Some((mut project, editor)) = split else {
       self.first_iteration_finished = true;
-      warn!("Coutldn't split the title {} at -", w.title);
+
+      if self.warned != w.title {
+        warn!("Coutldn't split the title {} at -", w.title);
+        self.warned = w.title;
+      }
+
       return Ok(());
     };
     // deal with unsaved files
     if project.starts_with("*") {
       project = &project[1..project.len()];
     }
+
     if project.find("[") == Some(0) {
         error!("Can't find [ in project {}! Skipping", project);
         return Ok(());
