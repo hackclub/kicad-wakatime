@@ -183,10 +183,18 @@ impl Plugin {
           match editor {
               "Symbol Editor" => warn!("Symbol file path empty, did you forget to set it?"),
               "Footprint Editor" => warn!("Footprint directory path empty, did you forget to set it?"),
-              _ => warn!("Can't find {} in {}", filename, self.projects_folder),
+              _ => {
+                  if self.warned != filename {
+                    warn!("Can't find {} in {}, did you choose the wrong project?", filename, self.projects_folder);
+                    self.warned = filename;
+                  }
+              },
           }
         } else {
-          warn!("Can't find {} in {}", filename, self.projects_folder);
+          if self.warned != filename {
+            warn!("Can't find {} in {}, did you choose the wrong project?", filename, self.projects_folder);
+            self.warned = filename;
+          }
         }
 
         self.first_iteration_finished = true;
