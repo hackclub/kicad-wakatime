@@ -32,7 +32,7 @@ impl Ui for Plugin {
     modal.show(|ui| -> Result<(), anyhow::Error> {
       ui.label(RichText::new("kicad-wakatime settings ^w^").size(16.0));
       ui.add_space(10.0);
-      ui.label("track ALL projects in this folder:");
+      ui.label("Folder containing your .kicad_pro file:");
       // ui.text_edit_singleline(&mut self.watched_folder);
       ui.monospace(format!("{:?}", self.projects_folder));
       if ui.button("select folder").clicked() {
