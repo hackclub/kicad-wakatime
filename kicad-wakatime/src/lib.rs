@@ -147,7 +147,7 @@ impl Plugin {
       self.first_iteration_finished = true;
 
       if self.warned != title {
-        warn!("Couldn't split the window title {} at -", title);
+        debug!("Couldn't split the window title {} at -", title);
         self.warned = title;
       }
 
