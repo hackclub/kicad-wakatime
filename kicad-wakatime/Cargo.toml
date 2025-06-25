@@ -25,6 +25,7 @@ mouse_position = "0.1.4"
 multi_log = "0.1.2"
 # nng = "1.0.1"
 notify = "7.0.0"
+regex = "1.11.1"
 reqwest = { version = "0.12.9", features = ["blocking", "json"] }
 rfd = "0.15.1"
 rust-ini = "0.21.1"

@@ -1,8 +1,10 @@
 use core::str;
 use std::collections::HashMap;
+use std::env;
 use std::fs::{self, File};
 use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
@@ -12,6 +14,7 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
+use regex::Regex;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use zip::ZipArchive;
 
@@ -92,12 +95,43 @@ impl Plugin {
     }
 
     self.set_current_time(self.current_time());
-    let Ok(w) = self.get_active_window() else {
-      self.first_iteration_finished = true;
-      return Ok(());
+
+    let hypr_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE");
+
+    let title: String = if hypr_signature.is_ok() {
+      // We are on hyyyyyyyyyperland!
+      let command = Command::new("hyprctl")
+                            .arg("activewindow")
+                            .output()
+                            .expect("`hyprctl` should be executable on Hyprland")
+                            .stdout;
+      let result = str::from_utf8(&command).unwrap();
+
+      let re = Regex::new(r"title: (?<title>[\S ]*)\n").unwrap();
+      match re.captures(result) {
+        Some(caps) => caps["title"].to_string(),
+        _ => { 
+          warn!("Couldn't get title via hyprland, falling back"); 
+
+          // Yeah lemme repeat twice the code idk how to do functions in rust
+          let Ok(w) = self.get_active_window() else {
+            self.first_iteration_finished = true;
+            return Ok(());
+          };
+
+          w.title
+        }
+      }
+    } else {
+      let Ok(w) = self.get_active_window() else {
+        self.first_iteration_finished = true;
+        return Ok(());
+      };
+
+      w.title
     };
 
-    if w.title == "Pin Properties" {
+    if title == "Pin Properties" {
         // TODO
         // self.send_heartbeat(false)?;
     }
@@ -105,13 +139,13 @@ impl Plugin {
     // TODO: maybe a regex would be way better for what we're about to do?
     // note: written this way, split can be Some for some things that aren't KiCAD, e.g. VS Code.
     // we sanity check it later.
-    let split = w.title.split_once(" — ");
+    let split = title.split_once(" — ");
     let Some((mut project, editor)) = split else {
       self.first_iteration_finished = true;
 
-      if self.warned != w.title {
-        warn!("Coutldn't split the title {} at -", w.title);
-        self.warned = w.title;
+      if self.warned != title {
+        warn!("Couldn't split the window title {} at -", title);
+        self.warned = title;
       }
 
       return Ok(());
