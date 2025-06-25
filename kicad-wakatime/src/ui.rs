@@ -32,19 +32,19 @@ impl Ui for Plugin {
     modal.show(|ui| -> Result<(), anyhow::Error> {
       ui.label(RichText::new("kicad-wakatime settings ^w^").size(16.0));
       ui.add_space(10.0);
-      ui.label("Folder containing your .kicad_pro file:");
+      ui.label("KiCAD project:");
       // ui.text_edit_singleline(&mut self.watched_folder);
       ui.monospace(format!("{:?}", self.projects_folder));
-      if ui.button("select folder").clicked() {
-        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-          self.projects_folder = path.to_str().unwrap().to_string();
+      if ui.button("select .kicad_pro file").clicked() {
+        if let Some(path) = rfd::FileDialog::new().add_filter("Kicad Project", &["kicad_pro"]).pick_file() {
+          self.projects_folder = path.parent().expect("Why not").to_str().unwrap().to_string();
         }
       }
 
       ui.label("Symbol Library File:");
       ui.monospace(format!("{:?}", self.symbol));
       if ui.button("select .kicad_sym file").clicked() {
-        if let Some(path) = rfd::FileDialog::new().pick_file() {
+        if let Some(path) = rfd::FileDialog::new().add_filter("Kicad Symbol", &["kicad_sym"]).pick_file() {
           self.symbol = path.to_str().unwrap().to_string();
         }
       }

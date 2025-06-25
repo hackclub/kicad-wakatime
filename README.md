@@ -19,7 +19,7 @@ Issues: When using hierarchy sheets, kicad-wakatime will create a project for ea
 
 Open `kicad-wakatime` and `kicad`. Click on "settings" in kicad wakatime and enter your API key. (Should be auto-filled if you have already installed hackatime)
 
-Click on the first "select folder" button, and select the folder that contains your ".kicad_pro" file. Click OK!
+Click on the first "select folder" button, and select your ".kicad_pro" file. Click OK!
 
 Now go back to kicad, please make the following changes to your KiCAD settings (Control+,) to use this version of kicad-wakatime:
 
