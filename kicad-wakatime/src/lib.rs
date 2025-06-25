@@ -38,11 +38,13 @@ pub struct Plugin {
   pub symbol: String,
   pub footprint: String,
   pub warned: String,
+  pub warned_kicad: String,
   // path of currently focused file
   pub full_path: PathBuf,
   pub full_paths: HashMap<String, PathBuf>,
   pub file_watcher: Option<RecommendedWatcher>,
   pub projects_folder: String,
+  pub projects_file: String,
   pub api_key: String,
   pub api_url: String,
   pub time: Duration,
@@ -73,10 +75,12 @@ impl Plugin {
       symbol: String::default(),
       footprint: String::default(),
       warned: String::default(),
+      warned_kicad: String::default(),
       full_path: PathBuf::default(),
       full_paths: HashMap::default(),
       file_watcher: None,
       projects_folder: String::default(),
+      projects_file: String::default(),
       api_key: String::default(),
       api_url: String::default(),
       time: Duration::default(),
@@ -91,8 +95,12 @@ impl Plugin {
     if !self.first_iteration_finished {
       self.check_up_to_date()?;
       self.check_cli_installed(self.redownload)?;
-      let projects_folder = self.get_projects_folder();
-      self.watch_files(projects_folder.clone())?;
+      let projects_folder = if self.projects_file == "" {
+          "".to_string()
+      } else { 
+          self.get_projects_file().parent().expect("Uh os problem").to_str().unwrap().to_string()
+      };
+      self.watch_files(projects_folder.into())?;
       info!("Finished setting up");
     }
 
@@ -186,16 +194,16 @@ impl Plugin {
               "Symbol Editor" => warn!("Symbol file path empty, did you forget to set it?"),
               "Footprint Editor" => warn!("Footprint directory path empty, did you forget to set it?"),
               _ => {
-                  if self.warned != filename {
+                  if self.warned_kicad != filename {
                     warn!("Can't find {} in {}, did you choose the wrong project?", filename, self.projects_folder);
-                    self.warned = filename;
+                    self.warned_kicad = filename;
                   }
               },
           }
         } else {
-          if self.warned != filename {
+          if self.warned_kicad != filename {
             warn!("Can't find {} in {}, did you choose the wrong project?", filename, self.projects_folder);
-            self.warned = filename;
+            self.warned_kicad = filename;
           }
         }
 
@@ -367,13 +375,13 @@ impl Plugin {
       None => String::new(),
     }
   }
-  pub fn set_projects_folder(&mut self, projects_folder: String) {
+  pub fn set_projects_file(&mut self, projects_file: String) {
     self.kicad_wakatime_config.with_section(Some("settings"))
-      .set("projects_folder", projects_folder);
+      .set("projects_file", projects_file);
   }
-  pub fn get_projects_folder(&mut self) -> PathBuf {
-    match self.kicad_wakatime_config.with_section(Some("settings")).get("projects_folder") {
-      Some(projects_folder) => PathBuf::from(projects_folder),
+  pub fn get_projects_file(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("projects_file") {
+      Some(projects_file) => PathBuf::from(projects_file),
       None => PathBuf::new(),
     }
   }
