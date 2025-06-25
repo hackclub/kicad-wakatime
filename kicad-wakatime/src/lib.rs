@@ -96,10 +96,11 @@ impl Plugin {
 
     self.set_current_time(self.current_time());
 
+    // Hyprland sets this environment variable
     let hypr_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE");
 
     let title: String = if hypr_signature.is_ok() {
-      // We are on hyyyyyyyyyperland!
+      // We are on hyyyyyyyyyperland! I don't want to keep looking at low res windows
       let command = Command::new("hyprctl")
                             .arg("activewindow")
                             .output()
@@ -110,10 +111,9 @@ impl Plugin {
       let re = Regex::new(r"title: (?<title>[\S ]*)\n").unwrap();
       match re.captures(result) {
         Some(caps) => caps["title"].to_string(),
-        _ => { 
+        _ => { // Something went wrong with hyprctl I guess
           warn!("Couldn't get title via hyprland, falling back"); 
 
-          // Yeah lemme repeat twice the code idk how to do functions in rust
           let Ok(w) = self.get_active_window() else {
             self.first_iteration_finished = true;
             return Ok(());
@@ -123,6 +123,7 @@ impl Plugin {
         }
       }
     } else {
+      // Use the normal method
       let Ok(w) = self.get_active_window() else {
         self.first_iteration_finished = true;
         return Ok(());

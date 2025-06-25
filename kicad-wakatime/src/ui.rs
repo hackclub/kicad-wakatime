@@ -41,6 +41,7 @@ impl Ui for Plugin {
         }
       }
 
+      // For footprint and symbol editing
       ui.label("Symbol Library File:");
       ui.monospace(format!("{:?}", self.symbol));
       if ui.button("select .kicad_sym file").clicked() {
