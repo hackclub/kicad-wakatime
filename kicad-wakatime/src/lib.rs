@@ -475,6 +475,12 @@ impl Plugin {
       .collect::<Vec<_>>();
     backups.sort_by_key(|x| x.metadata().unwrap().created().unwrap());
     let backups_count = backups.len();
+
+    if backups_count <= 1 {
+        // Skip a heartbeat, it will not matter in the long term tbh
+        return Ok(());
+    }
+
     let mut v1: Vec<u8> = vec![];
     let mut v2: Vec<u8> = vec![];
     let p1 = &backups[backups_count - 1];
