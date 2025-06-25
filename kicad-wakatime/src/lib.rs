@@ -1,8 +1,10 @@
 use core::str;
 use std::collections::HashMap;
+use std::env;
 use std::fs::{self, File};
 use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use active_win_pos_rs::{get_active_window, ActiveWindow};
@@ -12,8 +14,11 @@ use log::debug;
 use log::info;
 use log::error;
 use log::warn;
+use regex::Regex;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode};
 use zip::ZipArchive;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 pub mod ui;
 
@@ -30,11 +35,16 @@ pub struct Plugin {
   pub rx: Option<Receiver<notify::Result<notify::Event>>>,
   // filename of currently focused file
   pub filename: String,
+  pub symbol: String,
+  pub footprint: String,
+  pub warned: String,
+  pub warned_kicad: String,
   // path of currently focused file
   pub full_path: PathBuf,
   pub full_paths: HashMap<String, PathBuf>,
   pub file_watcher: Option<RecommendedWatcher>,
   pub projects_folder: String,
+  pub projects_file: String,
   pub api_key: String,
   pub api_url: String,
   pub time: Duration,
@@ -62,10 +72,15 @@ impl Plugin {
       tx: None,
       rx: None,
       filename: String::default(),
+      symbol: String::default(),
+      footprint: String::default(),
+      warned: String::default(),
+      warned_kicad: String::default(),
       full_path: PathBuf::default(),
       full_paths: HashMap::default(),
       file_watcher: None,
       projects_folder: String::default(),
+      projects_file: String::default(),
       api_key: String::default(),
       api_url: String::default(),
       time: Duration::default(),
@@ -80,40 +95,122 @@ impl Plugin {
     if !self.first_iteration_finished {
       self.check_up_to_date()?;
       self.check_cli_installed(self.redownload)?;
-      let projects_folder = self.get_projects_folder();
-      self.watch_files(projects_folder.clone())?;
+      let projects_folder = if self.projects_file == "" {
+          "".to_string()
+      } else { 
+          self.get_projects_file().parent().expect("Uh os problem").to_str().unwrap().to_string()
+      };
+      self.watch_files(projects_folder.into())?;
+      info!("Finished setting up");
     }
+
     self.set_current_time(self.current_time());
-    let Ok(w) = self.get_active_window() else {
-      self.first_iteration_finished = true;
-      return Ok(());
+
+    // Hyprland sets this environment variable
+    let hypr_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE");
+
+    let title: String = if hypr_signature.is_ok() {
+      // We are on hyyyyyyyyyperland! I don't want to keep looking at low res windows
+      let command = Command::new("hyprctl")
+                            .arg("activewindow")
+                            .output()
+                            .expect("`hyprctl` should be executable on Hyprland")
+                            .stdout;
+      let result = str::from_utf8(&command).unwrap();
+
+      let re = Regex::new(r"title: (?<title>[\S ]*)\n").unwrap();
+      match re.captures(result) {
+        Some(caps) => caps["title"].to_string(),
+        _ => { // Something went wrong with hyprctl I guess
+          warn!("Couldn't get title via hyprland, falling back"); 
+
+          let Ok(w) = self.get_active_window() else {
+            self.first_iteration_finished = true;
+            return Ok(());
+          };
+
+          w.title
+        }
+      }
+    } else {
+      // Use the normal method
+      let Ok(w) = self.get_active_window() else {
+        self.first_iteration_finished = true;
+        return Ok(());
+      };
+
+      w.title
     };
+
+    if title == "Pin Properties" {
+        // TODO
+        // self.send_heartbeat(false)?;
+    }
+
     // TODO: maybe a regex would be way better for what we're about to do?
     // note: written this way, split can be Some for some things that aren't KiCAD, e.g. VS Code.
     // we sanity check it later.
-    let split = w.title.split_once(" — ");
+    let split = title.split_once(" — ");
     let Some((mut project, editor)) = split else {
       self.first_iteration_finished = true;
+
+      if self.warned != title {
+        debug!("Couldn't split the window title {} at -", title);
+        self.warned = title;
+      }
+
       return Ok(());
     };
     // deal with unsaved files
     if project.starts_with("*") {
       project = &project[1..project.len()];
     }
-    // deal with hierarchical schematics
-    project = match (project.find("["), project.find("]")) {
-      (Some(left), Some(_right)) => &project[0..left-1],
-      _ => project,
-    };
-    let filename = match editor {
+
+    if project.find("[") == Some(0) {
+        error!("Can't find [ in project {}! Skipping", project);
+        return Ok(());
+    }
+
+    let symbol_dir = &self.symbol;
+    let footprint_dir = &self.footprint;
+    let mut filename = match editor {
       "Schematic Editor" => format!("{project}.kicad_sch"),
       "PCB Editor" => format!("{project}.kicad_pcb"),
+      "Symbol Editor" => format!("{symbol_dir}"),
+      "Footprint Editor" => format!("{footprint_dir}/{project}.kicad_mod"),
+      "KiCad 9.0" => return Ok(()),
       _ => String::new(),
     };
-    let Some(_full_path) = self.get_full_path(filename.clone()) else {
-      self.first_iteration_finished = true;
-      return Ok(());
-    };
+
+    if editor == "Schematic Editor" && filename.contains('[') {
+        let name = filename.split(' ').collect::<Vec<_>>()[0];
+        filename = format!("{name}.kicad_sch");
+    }
+
+    if (editor != "Symbol Editor" && editor != "Footprint Editor") || filename == "" {
+      let Some(_full_path) = self.get_full_path(filename.clone()) else {
+        if filename == "" {
+          match editor {
+              "Symbol Editor" => warn!("Symbol file path empty, did you forget to set it?"),
+              "Footprint Editor" => warn!("Footprint directory path empty, did you forget to set it?"),
+              _ => {
+                  if self.warned_kicad != filename {
+                    warn!("Can't find {} in {}, did you choose the wrong project?", filename, self.projects_folder);
+                    self.warned_kicad = filename;
+                  }
+              },
+          }
+        } else {
+          if self.warned_kicad != filename {
+            warn!("Can't find {} in {}, did you choose the wrong project?", filename, self.projects_folder);
+            self.warned_kicad = filename;
+          }
+        }
+
+        self.first_iteration_finished = true;
+        return Ok(());
+      };
+    }
     // let project_folder = full_path.parent().unwrap().to_path_buf();
     // let backups_folder = project_folder.join(format!("{project}-backups"));
     self.set_current_file(filename.clone())?;
@@ -141,6 +238,10 @@ impl Plugin {
     if fs::exists(cli_path.clone())? {
       let mut cli = std::process::Command::new(cli_path);
       cli.arg("--version");
+      #[cfg(windows)]
+      {
+        cli.creation_flags(0x08000000); // CREATE_NO_WINDOW
+      }
       let cli_output = cli.output()
         .expect("Could not execute WakaTime CLI!");
       let cli_stdout = cli_output.stdout;
@@ -274,12 +375,32 @@ impl Plugin {
       None => String::new(),
     }
   }
-  pub fn set_projects_folder(&mut self, projects_folder: String) {
+  pub fn set_projects_file(&mut self, projects_file: String) {
     self.kicad_wakatime_config.with_section(Some("settings"))
-      .set("projects_folder", projects_folder);
+      .set("projects_file", projects_file);
   }
-  pub fn get_projects_folder(&mut self) -> PathBuf {
-    match self.kicad_wakatime_config.with_section(Some("settings")).get("projects_folder") {
+  pub fn get_projects_file(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("projects_file") {
+      Some(projects_file) => PathBuf::from(projects_file),
+      None => PathBuf::new(),
+    }
+  }
+  pub fn set_symbol_file(&mut self, projects_folder: String) {
+    self.kicad_wakatime_config.with_section(Some("settings"))
+      .set("symbol_file", projects_folder);
+  }
+  pub fn get_symbol_file(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("symbol_file") {
+      Some(projects_folder) => PathBuf::from(projects_folder),
+      None => PathBuf::new(),
+    }
+  }
+  pub fn set_footprint_folder(&mut self, projects_folder: String) {
+    self.kicad_wakatime_config.with_section(Some("settings"))
+      .set("footprint_folder", projects_folder);
+  }
+  pub fn get_footprint_folder(&mut self) -> PathBuf {
+    match self.kicad_wakatime_config.with_section(Some("settings")).get("footprint_folder") {
       Some(projects_folder) => PathBuf::from(projects_folder),
       None => PathBuf::new(),
     }
@@ -289,7 +410,12 @@ impl Plugin {
       String::from("KiCAD Schematic")
     } else if self.filename.ends_with(".kicad_pcb") {
       String::from("KiCAD PCB")
+    } else if self.filename.ends_with(".kicad_sym") {
+      String::from("KiCAD Symbol")
+    } else if self.filename.ends_with(".kicad_mod") {
+      String::from("KiCAD Footprint")
     } else {
+      error!("Unknown language for {}", self.filename);
       unreachable!()
     }
   }
@@ -349,6 +475,12 @@ impl Plugin {
       .collect::<Vec<_>>();
     backups.sort_by_key(|x| x.metadata().unwrap().created().unwrap());
     let backups_count = backups.len();
+
+    if backups_count <= 1 {
+        // Skip a heartbeat, it will not matter in the long term tbh
+        return Ok(());
+    }
+
     let mut v1: Vec<u8> = vec![];
     let mut v2: Vec<u8> = vec![];
     let p1 = &backups[backups_count - 1];
@@ -357,15 +489,22 @@ impl Plugin {
     let f2 = File::open(p2)?;
     let mut newest_backup = ZipArchive::new(f1)?;
     let mut second_newest_backup = ZipArchive::new(f2)?;
-    let mut newest_backup_of_filename = newest_backup.by_name(&filename)?;
-    let mut second_newest_backup_of_filename = second_newest_backup.by_name(&filename)?;
-    newest_backup_of_filename.read_to_end(&mut v1)?;
-    second_newest_backup_of_filename.read_to_end(&mut v2)?;
-    if v1.ne(&v2) {
-      info!("Change detected!");
-      self.maybe_send_heartbeat(filename, false)?;
+
+    if let Ok(mut newest_backup_of_filename) = newest_backup.by_name(&filename) {
+        if let Ok(mut second_newest_backup_of_filename) = second_newest_backup.by_name(&filename) {
+            newest_backup_of_filename.read_to_end(&mut v1)?;
+            second_newest_backup_of_filename.read_to_end(&mut v2)?;
+            if v1.ne(&v2) {
+              info!("Change detected!");
+              self.maybe_send_heartbeat(filename, false)?;
+            } else {
+              info!("No change detected!");
+            }
+        } else {
+            error!("Error getting {} in backup!", filename);
+        }
     } else {
-      info!("No change detected!");
+        error!("Error getting {} in backup!", filename);
     }
     Ok(())
   }
@@ -438,7 +577,12 @@ impl Plugin {
     self.enough_time_passed() ||
     self.filename != filename {
       self.filename = filename.clone();
-      self.full_path = self.get_full_path(filename.clone()).unwrap().to_path_buf();
+      self.full_path = if filename.ends_with(".kicad_sym") || filename.ends_with(".kicad_mod") {
+        PathBuf::from(filename)
+      } else {
+        self.get_full_path(filename.clone()).unwrap().to_path_buf()
+      };
+
       self.send_heartbeat(is_file_saved)?;
     } else {
       debug!("Not sending heartbeat (no conditions met)");
@@ -479,6 +623,10 @@ impl Plugin {
     cli.args(["--project", &file_stem]);
     if is_file_saved {
       cli.arg("--write");
+    }
+    #[cfg(windows)]
+    {
+      cli.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     info!("Executing WakaTime CLI...");
     let cli_output = cli.output()
