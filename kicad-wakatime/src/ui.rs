@@ -12,12 +12,12 @@ pub trait Ui {
 
 impl Ui for Plugin {
   fn draw_ui(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) -> Result<(), anyhow::Error> {
-    let projects_folder = self.get_projects_folder();
+    let projects_file = self.get_projects_file();
     let api_key = self.get_api_key();
     let api_url = self.get_api_url();
     let status = if !self.first_iteration_finished {
       "loading..."
-    } else if projects_folder.as_os_str().is_empty() || api_key.is_empty() || api_url.is_empty() {
+    } else if projects_file.as_os_str().is_empty() || api_key.is_empty() || api_url.is_empty() {
       "need settings!"
     } else {
       "OK"
@@ -32,20 +32,41 @@ impl Ui for Plugin {
     modal.show(|ui| -> Result<(), anyhow::Error> {
       ui.label(RichText::new("kicad-wakatime settings ^w^").size(16.0));
       ui.add_space(10.0);
-      ui.label("track ALL projects in this folder:");
+      ui.label("KiCAD project:");
       // ui.text_edit_singleline(&mut self.watched_folder);
-      ui.monospace(format!("{:?}", self.projects_folder));
-      if ui.button("select folder").clicked() {
-        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-          self.projects_folder = path.to_str().unwrap().to_string();
+      ui.monospace(format!("{:?}", self.projects_file));
+      if ui.button("select .kicad_pro file").clicked() {
+        if let Some(path) = rfd::FileDialog::new().add_filter("Kicad Project", &["kicad_pro"]).pick_file() {
+          self.projects_file = path.to_str().unwrap().to_string();
+          self.projects_folder = path.parent().expect("Why not").to_str().unwrap().to_string();
         }
       }
+
+      // For footprint and symbol editing
+      ui.label("Symbol Library File:");
+      ui.monospace(format!("{:?}", self.symbol));
+      if ui.button("select .kicad_sym file").clicked() {
+        if let Some(path) = rfd::FileDialog::new().add_filter("Kicad Symbol", &["kicad_sym"]).pick_file() {
+          self.symbol = path.to_str().unwrap().to_string();
+        }
+      }
+      ui.label("Footprint Library Path:");
+      ui.monospace(format!("{:?}", self.footprint));
+      if ui.button("select folder containing .kicad_mod files").clicked() {
+        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+          self.footprint = path.to_str().unwrap().to_string();
+        }
+      }
+
       ui.label("API key:");
       ui.text_edit_singleline(&mut self.api_key);
       ui.label("API URL:");
       ui.text_edit_singleline(&mut self.api_url);
+
       if ui.button("OK").clicked() {
-        self.set_projects_folder(self.projects_folder.clone());
+        self.set_projects_file(self.projects_file.clone());
+        self.set_symbol_file(self.symbol.clone());
+        self.set_footprint_folder(self.footprint.clone());
         self.set_api_key(self.api_key.clone());
         self.set_api_url(self.api_url.clone());
         self.store_config()?;

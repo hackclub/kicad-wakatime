@@ -14,6 +14,7 @@ use log::error;
 use log::info;
 // use log::warn;
 use multi_log::MultiLogger;
+use simplelog;
 
 /// WakaTime plugin for KiCAD
 #[derive(Parser)]
@@ -53,7 +54,8 @@ fn main() -> Result<(), anyhow::Error> {
       })
       .build()
   );
-  MultiLogger::init(vec![egui_logger, env_logger], log::Level::Debug)
+  let std_logger = simplelog::SimpleLogger::new(log::LevelFilter::Warn, simplelog::Config::default());
+  MultiLogger::init(vec![egui_logger, env_logger, std_logger], log::Level::Debug)
     .expect("Could not initialize multi logger!");
   log_panics::init();
 
@@ -86,7 +88,14 @@ fn main() -> Result<(), anyhow::Error> {
 
   // settings population
   plugin.load_config()?;
-  plugin.projects_folder = plugin.get_projects_folder().to_str().unwrap().to_string();
+  plugin.projects_file = plugin.get_projects_file().to_str().unwrap().to_string();
+  plugin.projects_folder = if plugin.projects_file == "" {
+      "".to_string()
+  } else { 
+      plugin.get_projects_file().parent().expect("Uh os problem").to_str().unwrap().to_string()
+  };
+  plugin.symbol = plugin.get_symbol_file().to_str().unwrap().to_string();
+  plugin.footprint = plugin.get_footprint_folder().to_str().unwrap().to_string();
   plugin.api_key = plugin.get_api_key();
   plugin.api_url = plugin.get_api_url();
 
