@@ -26,11 +26,23 @@ jobs:
                   sudo apt install xcb
                   sudo apt install libxcb1
                   sudo apt install libxcb1-dev
+             elif [ "$RUNNER_OS" == "macOS" ]; then
+                  rustup target add x86_64-apple-darwin
+                  cd kicad-wakatime && cargo build --target x86_64-apple-darwin --release
              fi
+             echo "$RUNNER_OS"
       shell: bash
 
     - name: Build
       run: cd kicad-wakatime && cargo build --release
+
+    - name: Universal macos binary
+      run:   |
+             if [ "$RUNNER_OS" == "macOS" ]; then
+                 lipo -create -output ${{ github.workspace }}/kicad-wakatime/target/release/kicad-wakatime ${{ github.workspace }}/kicad-wakatime/target/release/kicad-wakatime ${{ github.workspace }}/kicad-wakatime/target/x86_64-apple-darwin/release/kicad-wakatime
+             fi
+             echo "$RUNNER_OS"
+      shell: bash
 
     - uses: actions/upload-artifact@v4
       with:
