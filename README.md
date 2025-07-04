@@ -51,8 +51,7 @@ flatpak override --env=GDK_BACKEND=x11 org.kicad.KiCad
 This solution only works if xwayland is running and supported by the compositor. This works by default on most compositors, but if it isn't check out https://github.com/Supreeeme/xwayland-satellite
 
 ## Note
-Prior to [version 0.2.0](https://github.com/hackclub/kicad-wakatime/releases/tag/0.2.0), KiCAD 8.99 nightly or greater was required in order to use kicad-wakatime. This is no longer required, and new users should be using KiCAD 8.0.7 stable instead.\
-However, users who have already saved their project using KiCAD 8.99 or greater **cannot** downgrade to an older version of KiCAD.
+Prior to [version 0.2.0](https://github.com/hackclub/kicad-wakatime/releases/tag/0.2.0), KiCAD 8.99 nightly or greater was required in order to use kicad-wakatime. This is no longer required.
 
 <details>
 <summary>Downloading KiCAD 8.99</summary>
