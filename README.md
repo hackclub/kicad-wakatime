@@ -34,7 +34,7 @@ Your settings tab should look like this:
 
 And you are done! Happy pcb-ing!
 
-If you plan on doing symbol editing, select your .kicad_sym using the second button, and if you are going to do footprint editing, select your .pretty folder containing all the .kicad_mod fils using the third button.
+If you plan on doing symbol editing, select your .kicad_sym using the second button, and if you are going to do footprint editing, select your .pretty folder containing all the .kicad_mod fils using the third button. They can be left empty.
 
 If you are on Linux Wayland (Hyprland doesn't count - it is supported), open kicad using the following command:
 
