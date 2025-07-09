@@ -28,7 +28,7 @@ Now go back to kicad, please make the following changes to your KiCAD settings (
     "Create backups when auto save occurs" should be checked.
     Minimum time between backups should be set to 0 minutes.
 
-Your settings tab should look like this:
+Your settings tab should look like this: (The backup part matters!)
 
 ![](https://hc-cdn.hel1.your-objectstorage.com/s/v3/6fb6fc315989d9798771bf14417c9e70ed031125_image.png)
 
