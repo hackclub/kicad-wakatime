@@ -11,6 +11,8 @@ On all platforms:
 
 If you are on Linux, you also have to install `zenity` via your package manager.
 
+If you are on MacOS, you need to go to Settings > Privacy & Security > Security and click Allow (Might need to scroll down)
+
 If you know what you're doing, you can build kicad-wakatime from the main branch instead. Just run `cargo build` in the `kicad-wakatime` directory and everything should work.
 
 The code in the main branch should be considered unstable, as some features may still be in progress between releases.
