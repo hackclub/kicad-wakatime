@@ -76,6 +76,8 @@ sudo apt install kicad-nightly
 
 Known issue: When using hierarchy sheets, kicad-wakatime will create a project for each sheet. If you are going to use this for SoM, just select all the projects applicable in their UI.
 
+If kicad-wakatime keeps saying `No change detected!`, create a new project, select that new project in wakatime, go back to the old project, select the old project in wakatime. Kicad is most likely stuck in a weird state.
+
 If kicad-wakatime is not doing what you expect, please [open an issue](https://github.com/hackclub/kicad-wakatime/issues).
 
 The bug report template will ask you for a magic word to confirm that you've read this README.\
