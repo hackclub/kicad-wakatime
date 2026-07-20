@@ -276,10 +276,10 @@ impl Plugin {
         return Ok(())
       }
     }
-    let name = json["name"]
-      .as_str()
-      .unwrap()
-      .to_string();
+    let Some(name) = json["name"].as_str() else {
+      warn!("Could not read version from GitHub API response");
+      return Ok(())
+    };
     if name != PLUGIN_VERSION {
       info!("kicad-wakatime update available!");
       info!("Visit https://github.com/hackclub/kicad-wakatime to download it");
